@@ -5,6 +5,7 @@ import com.neobank.kozala_client.dto.ClientResponse;
 import com.neobank.kozala_client.entity.Client;
 import com.neobank.kozala_client.repository.ClientRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,6 +17,7 @@ import java.util.stream.Collectors;
 public class ClientService {
 
     private final ClientRepository clientRepository;
+    private final PasswordEncoder passwordEncoder;
 
     @Transactional(readOnly = true)
     public List<ClientResponse> findAll() {
@@ -39,6 +41,9 @@ public class ClientService {
         if (clientRepository.existsByPhone(request.getPhone())) {
             throw new RuntimeException("Un client avec ce téléphone existe déjà");
         }
+        String passwordHash = (request.getPassword() != null && !request.getPassword().isBlank())
+                ? passwordEncoder.encode(request.getPassword())
+                : null;
         Client client = Client.builder()
                 .type(request.getType())
                 .displayName(request.getDisplayName())
@@ -46,6 +51,7 @@ public class ClientService {
                 .lastName(request.getLastName())
                 .email(request.getEmail())
                 .phone(request.getPhone())
+                .passwordHash(passwordHash)
                 .build();
         client = clientRepository.save(client);
         return toResponse(client);

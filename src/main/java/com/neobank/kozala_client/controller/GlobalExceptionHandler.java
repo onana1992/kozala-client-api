@@ -1,6 +1,8 @@
 package com.neobank.kozala_client.controller;
 
 import com.neobank.kozala_client.dto.ApiResponse;
+import com.neobank.kozala_client.service.AuthService;
+import com.neobank.kozala_client.service.JwtService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
@@ -13,6 +15,20 @@ import java.util.Map;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(AuthService.BadCredentialsException.class)
+    public ResponseEntity<ApiResponse<Void>> handleBadCredentials(AuthService.BadCredentialsException ex) {
+        return ResponseEntity
+                .status(HttpStatus.UNAUTHORIZED)
+                .body(ApiResponse.error(ex.getMessage()));
+    }
+
+    @ExceptionHandler(JwtService.InvalidTokenException.class)
+    public ResponseEntity<ApiResponse<Void>> handleInvalidToken(JwtService.InvalidTokenException ex) {
+        return ResponseEntity
+                .status(HttpStatus.UNAUTHORIZED)
+                .body(ApiResponse.error(ex.getMessage()));
+    }
 
     @ExceptionHandler(RuntimeException.class)
     public ResponseEntity<ApiResponse<Void>> handleRuntimeException(RuntimeException ex) {

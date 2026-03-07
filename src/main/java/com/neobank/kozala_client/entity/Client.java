@@ -42,6 +42,10 @@ public class Client {
     @Column(nullable = false, unique = true, length = 50)
     private String phone;
 
+    /** Hash BCrypt du mot de passe pour l'authentification (un client = un compte de connexion). */
+    @Column(name = "password_hash", length = 255)
+    private String passwordHash;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     @Builder.Default

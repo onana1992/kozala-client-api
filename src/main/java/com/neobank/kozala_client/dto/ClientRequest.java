@@ -28,4 +28,7 @@ public class ClientRequest {
 
     @NotBlank(message = "Le téléphone est obligatoire")
     private String phone;
+
+    /** Mot de passe pour la connexion (optionnel à la création ; hashé en BCrypt). */
+    private String password;
 }
