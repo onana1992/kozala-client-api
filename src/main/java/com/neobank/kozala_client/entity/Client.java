@@ -61,6 +61,10 @@ public class Client {
     @Column(name = "rejection_reason", columnDefinition = "TEXT")
     private String rejectionReason;
 
+    /** Nom du fichier photo de profil stocké (ex: uuid.jpg). Null si pas de photo. */
+    @Column(name = "profile_photo_path", length = 255)
+    private String profilePhotoPath;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 

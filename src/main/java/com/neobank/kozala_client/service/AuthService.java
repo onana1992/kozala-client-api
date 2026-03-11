@@ -60,6 +60,7 @@ public class AuthService {
                 .refreshExpiresIn(refreshExpiresInSec)
                 .displayName(client.getDisplayName() != null ? client.getDisplayName() : "")
                 .phone(client.getPhone() != null ? client.getPhone() : "")
+                .profilePhotoUrl(buildProfilePhotoUrl(client))
                 .build();
     }
 
@@ -86,6 +87,7 @@ public class AuthService {
                 .refreshExpiresIn(refreshExpiresInSec)
                 .displayName(client.getDisplayName() != null ? client.getDisplayName() : "")
                 .phone(client.getPhone() != null ? client.getPhone() : "")
+                .profilePhotoUrl(buildProfilePhotoUrl(client))
                 .build();
     }
 
@@ -212,7 +214,15 @@ public class AuthService {
                 .refreshExpiresIn(refreshExpiresInSec)
                 .displayName(client.getDisplayName() != null ? client.getDisplayName() : "")
                 .phone(client.getPhone() != null ? client.getPhone() : "")
+                .profilePhotoUrl(buildProfilePhotoUrl(client))
                 .build();
+    }
+
+    private static String buildProfilePhotoUrl(Client client) {
+        if (client.getProfilePhotoPath() == null || client.getProfilePhotoPath().isBlank()) {
+            return null;
+        }
+        return "/api/profile/photos/" + client.getProfilePhotoPath();
     }
 
     public static class BadCredentialsException extends RuntimeException {

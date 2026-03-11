@@ -22,4 +22,6 @@ public class AuthResponse {
     private String displayName;
     /** Téléphone du client. */
     private String phone;
+    /** URL relative de la photo de profil (ex: /api/profile/photos/uuid.jpg), null si aucune. */
+    private String profilePhotoUrl;
 }
