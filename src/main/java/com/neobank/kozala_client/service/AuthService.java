@@ -8,6 +8,7 @@ import com.neobank.kozala_client.entity.ClientType;
 import com.neobank.kozala_client.repository.ClientRepository;
 import io.jsonwebtoken.Claims;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,8 +16,14 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.UUID;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class AuthService {
+
+    private static String maskPhone(String phone) {
+        if (phone == null || phone.length() < 4) return "***";
+        return phone.substring(0, Math.min(4, phone.length())) + "***" + phone.substring(phone.length() - 2);
+    }
 
     private static final String TOKEN_TYPE = "Bearer";
 
@@ -40,6 +47,7 @@ public class AuthService {
         if (!passwordEncoder.matches(password, client.getPasswordHash())) {
             throw new BadCredentialsException("Identifiants invalides");
         }
+        log.info("Sign in success clientId={} phone={}", client.getId(), maskPhone(phone));
         String accessToken = jwtService.generateAccessToken(client);
         String refreshToken = jwtService.generateRefreshToken(client);
         long expiresInSec = jwtProperties.getAccessExpirationMs() / 1000;
@@ -50,6 +58,8 @@ public class AuthService {
                 .tokenType(TOKEN_TYPE)
                 .expiresIn(expiresInSec)
                 .refreshExpiresIn(refreshExpiresInSec)
+                .displayName(client.getDisplayName() != null ? client.getDisplayName() : "")
+                .phone(client.getPhone() != null ? client.getPhone() : "")
                 .build();
     }
 
@@ -74,6 +84,8 @@ public class AuthService {
                 .tokenType(TOKEN_TYPE)
                 .expiresIn(expiresInSec)
                 .refreshExpiresIn(refreshExpiresInSec)
+                .displayName(client.getDisplayName() != null ? client.getDisplayName() : "")
+                .phone(client.getPhone() != null ? client.getPhone() : "")
                 .build();
     }
 
@@ -103,10 +115,16 @@ public class AuthService {
 
     /**
      * Envoie un code OTP au numéro. Le code est stocké dans Redis (clé otp:phone, TTL 5 min).
+     * Vérifie qu'aucun compte (avec mot de passe) n'existe déjà pour ce numéro avant de générer l'OTP.
      * À brancher : envoi SMS (Twilio, etc.).
      */
     public SendOtpResponse sendOtp(String phone) {
         String normalized = OtpService.normalizePhone(phone);
+        clientRepository.findByPhone(normalized).ifPresent(client -> {
+            if (client.getPasswordHash() != null && !client.getPasswordHash().isEmpty()) {
+                throw new AccountAlreadyExistsException("Un compte existe déjà avec ce numéro. Connectez-vous.");
+            }
+        });
         otpService.generateAndStore(normalized);
         // TODO: envoyer SMS (Twilio, etc.). En dev le code est loggé par OtpService.
         return SendOtpResponse.builder().success(true).build();
@@ -192,6 +210,8 @@ public class AuthService {
                 .tokenType(TOKEN_TYPE)
                 .expiresIn(expiresInSec)
                 .refreshExpiresIn(refreshExpiresInSec)
+                .displayName(client.getDisplayName() != null ? client.getDisplayName() : "")
+                .phone(client.getPhone() != null ? client.getPhone() : "")
                 .build();
     }
 
@@ -209,6 +229,13 @@ public class AuthService {
 
     public static class InvalidSignupTokenException extends RuntimeException {
         public InvalidSignupTokenException(String message) {
+            super(message);
+        }
+    }
+
+    /** Levée lorsqu'un utilisateur tente de s'inscrire avec un numéro déjà associé à un compte. */
+    public static class AccountAlreadyExistsException extends RuntimeException {
+        public AccountAlreadyExistsException(String message) {
             super(message);
         }
     }

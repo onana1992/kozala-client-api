@@ -18,4 +18,8 @@ public class AuthResponse {
     private long expiresIn;
     /** Durée de vie du refresh token en secondes. */
     private long refreshExpiresIn;
+    /** Nom d'affichage du client (pour l'onglet Compte). */
+    private String displayName;
+    /** Téléphone du client. */
+    private String phone;
 }
