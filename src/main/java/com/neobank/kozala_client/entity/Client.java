@@ -3,6 +3,7 @@ package com.neobank.kozala_client.entity;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -36,7 +37,19 @@ public class Client {
     @Column(name = "last_name", length = 150)
     private String lastName;
 
-    @Column(nullable = false, unique = true, length = 255)
+    /** Genre: male, female */
+    @Column(length = 20)
+    private String gender;
+
+    @Column(name = "birth_date")
+    private LocalDate birthDate;
+
+    /** Situation familiale: single, married, divorced, widowed */
+    @Column(name = "marital_status", length = 20)
+    private String maritalStatus;
+
+    /** Null jusqu'à vérification email (étape vérification). */
+    @Column(unique = true, length = 255)
     private String email;
 
     @Column(nullable = false, unique = true, length = 50)
