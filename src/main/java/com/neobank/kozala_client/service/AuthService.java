@@ -13,8 +13,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.UUID;
-
 @Service
 @Slf4j
 @RequiredArgsConstructor
@@ -33,12 +31,18 @@ public class AuthService {
     private final JwtProperties jwtProperties;
     private final OtpService otpService;
     private final SignupTokenStore signupTokenStore;
+    private final ResetPasswordTokenStore resetPasswordTokenStore;
+    private final LoginTokenStore loginTokenStore;
+    private final TrustedDeviceStore trustedDeviceStore;
+
+    private static final long LOGIN_OTP_VALIDITY_SECONDS = 300; // 5 min
 
     /**
-     * Connexion par téléphone + mot de passe. Émet access + refresh tokens et persiste le refresh (révocable).
+     * Connexion par téléphone + mot de passe. Si l'appareil est inconnu (deviceId absent ou non de confiance),
+     * retourne requiresOtp + loginToken et envoie un OTP par SMS (log en dev). Sinon retourne les tokens.
      */
     @Transactional
-    public AuthResponse login(String phone, String password) {
+    public LoginResponse login(String phone, String password, String deviceId) {
         Client client = clientRepository.findByPhone(phone)
                 .orElseThrow(() -> new BadCredentialsException("Identifiants invalides"));
         if (client.getPasswordHash() == null || client.getPasswordHash().isEmpty()) {
@@ -47,7 +51,69 @@ public class AuthService {
         if (!passwordEncoder.matches(password, client.getPasswordHash())) {
             throw new BadCredentialsException("Identifiants invalides");
         }
-        log.info("Sign in success clientId={} phone={}", client.getId(), maskPhone(phone));
+        boolean deviceTrusted = deviceId != null && !deviceId.isBlank()
+                && trustedDeviceStore.isTrusted(client.getId(), deviceId);
+        if (deviceTrusted) {
+            log.info("Sign in success (trusted device) clientId={} phone={}", client.getId(), maskPhone(phone));
+            return buildLoginResponseWithTokens(client);
+        }
+        String loginToken = loginTokenStore.createToken(client.getId());
+        otpService.generateAndStoreLogin(client.getPhone());
+        log.info("Login OTP required for clientId={} phone={}", client.getId(), maskPhone(phone));
+        return LoginResponse.builder()
+                .requiresOtp(true)
+                .loginToken(loginToken)
+                .otpExpiresIn(LOGIN_OTP_VALIDITY_SECONDS)
+                .build();
+    }
+
+    /**
+     * Renvoie un nouveau code OTP pour la connexion en cours (même loginToken). En dev le code est loggé.
+     */
+    public void resendLoginOtp(String loginToken) {
+        Long clientId = loginTokenStore.getClientId(loginToken)
+                .orElseThrow(() -> new InvalidLoginTokenException("Session expirée. Reconnectez-vous."));
+        Client client = clientRepository.findById(clientId)
+                .orElseThrow(() -> new InvalidLoginTokenException("Compte introuvable"));
+        otpService.generateAndStoreLogin(client.getPhone());
+        log.info("Login OTP resent for clientId={} phone={}", client.getId(), maskPhone(client.getPhone()));
+    }
+
+    /**
+     * Vérifie le code OTP de connexion et retourne les tokens. Marque l'appareil comme de confiance si deviceId fourni.
+     */
+    @Transactional
+    public AuthResponse verifyLoginOtp(String loginToken, String code, String deviceId) {
+        Long clientId = loginTokenStore.getAndRemove(loginToken)
+                .orElseThrow(() -> new InvalidLoginTokenException("Session expirée. Reconnectez-vous."));
+        Client client = clientRepository.findById(clientId)
+                .orElseThrow(() -> new InvalidLoginTokenException("Compte introuvable"));
+        if (!otpService.validateLogin(client.getPhone(), code)) {
+            throw new InvalidOtpException("Code invalide ou expiré");
+        }
+        if (deviceId != null && !deviceId.isBlank()) {
+            trustedDeviceStore.markTrusted(client.getId(), deviceId);
+        }
+        log.info("Login OTP verified clientId={} phone={}", client.getId(), maskPhone(client.getPhone()));
+        return buildAuthResponse(client);
+    }
+
+    private LoginResponse buildLoginResponseWithTokens(Client client) {
+        AuthResponse auth = buildAuthResponse(client);
+        return LoginResponse.builder()
+                .requiresOtp(false)
+                .accessToken(auth.getAccessToken())
+                .refreshToken(auth.getRefreshToken())
+                .tokenType(auth.getTokenType())
+                .expiresIn(auth.getExpiresIn())
+                .refreshExpiresIn(auth.getRefreshExpiresIn())
+                .displayName(auth.getDisplayName())
+                .phone(auth.getPhone())
+                .profilePhotoUrl(auth.getProfilePhotoUrl())
+                .build();
+    }
+
+    private AuthResponse buildAuthResponse(Client client) {
         String accessToken = jwtService.generateAccessToken(client);
         String refreshToken = jwtService.generateRefreshToken(client);
         long expiresInSec = jwtProperties.getAccessExpirationMs() / 1000;
@@ -75,20 +141,7 @@ public class AuthService {
         Client client = clientRepository.findById(clientId)
                 .orElseThrow(() -> new JwtService.InvalidTokenException("Client introuvable"));
         jwtService.revokeRefreshTokenByJti(jti);
-        String accessToken = jwtService.generateAccessToken(client);
-        String newRefreshToken = jwtService.generateRefreshToken(client);
-        long expiresInSec = jwtProperties.getAccessExpirationMs() / 1000;
-        long refreshExpiresInSec = jwtProperties.getRefreshExpirationMs() / 1000;
-        return AuthResponse.builder()
-                .accessToken(accessToken)
-                .refreshToken(newRefreshToken)
-                .tokenType(TOKEN_TYPE)
-                .expiresIn(expiresInSec)
-                .refreshExpiresIn(refreshExpiresInSec)
-                .displayName(client.getDisplayName() != null ? client.getDisplayName() : "")
-                .phone(client.getPhone() != null ? client.getPhone() : "")
-                .profilePhotoUrl(buildProfilePhotoUrl(client))
-                .build();
+        return buildAuthResponse(client);
     }
 
     /**
@@ -156,13 +209,12 @@ public class AuthService {
         Client client = clientRepository.findByPhone(phone).orElse(null);
         if (client == null) {
             String displayName = (firstName + " " + lastName).trim();
-            String email = "signup-" + UUID.randomUUID() + "@temp.kozala.local";
             client = Client.builder()
                     .type(ClientType.PERSON)
                     .displayName(displayName.isEmpty() ? "Client" : displayName)
                     .firstName(firstName)
                     .lastName(lastName)
-                    .email(email)
+                    .email(null)
                     .phone(phone)
                     .passwordHash(null)
                     .status(ClientStatus.DRAFT)
@@ -176,6 +228,50 @@ public class AuthService {
             clientRepository.save(client);
         }
         signupTokenStore.associateClientId(signupToken, client.getId());
+    }
+
+    // ---------- Mot de passe oublié ----------
+
+    /**
+     * Demande de réinitialisation : vérifie qu'un compte existe avec ce numéro et un mot de passe,
+     * génère un OTP (stocké en Redis, clé reset_otp:phone), log le code en dev. À brancher : envoi SMS.
+     */
+    public void requestPasswordReset(String phone) {
+        String normalized = OtpService.normalizePhone(phone);
+        Client client = clientRepository.findByPhone(normalized)
+                .orElseThrow(() -> new BadCredentialsException("Aucun compte avec ce numéro."));
+        if (client.getPasswordHash() == null || client.getPasswordHash().isEmpty()) {
+            throw new BadCredentialsException("Aucun compte avec ce numéro.");
+        }
+        otpService.generateAndStoreReset(normalized);
+    }
+
+    /**
+     * Vérifie le code OTP de réinitialisation et retourne un resetToken (usage unique, TTL 15 min).
+     */
+    public VerifyResetOtpResponse verifyResetOtp(String phone, String code) {
+        String normalized = OtpService.normalizePhone(phone);
+        if (!otpService.validateReset(normalized, code)) {
+            throw new InvalidOtpException("Code invalide ou expiré");
+        }
+        String resetToken = resetPasswordTokenStore.createToken(normalized);
+        return VerifyResetOtpResponse.builder().resetToken(resetToken).build();
+    }
+
+    /**
+     * Réinitialise le mot de passe avec le token (usage unique), révoque les refresh tokens du client.
+     */
+    @Transactional
+    public void resetPassword(String resetToken, String newPassword) {
+        String phone = resetPasswordTokenStore.getAndRemove(resetToken)
+                .orElseThrow(() -> new InvalidResetTokenException("Lien expiré ou déjà utilisé. Recommencez la procédure."));
+        Client client = clientRepository.findByPhone(phone)
+                .orElseThrow(() -> new InvalidResetTokenException("Client introuvable"));
+        client.setPasswordHash(passwordEncoder.encode(newPassword));
+        clientRepository.save(client);
+        jwtService.revokeAllRefreshTokensForClient(client.getId());
+        trustedDeviceStore.removeAllForClient(client.getId());
+        log.info("Password reset for clientId={} phone={}", client.getId(), maskPhone(phone));
     }
 
     /**
@@ -202,20 +298,7 @@ public class AuthService {
 
         signupTokenStore.remove(signupToken);
 
-        String accessToken = jwtService.generateAccessToken(client);
-        String refreshToken = jwtService.generateRefreshToken(client);
-        long expiresInSec = jwtProperties.getAccessExpirationMs() / 1000;
-        long refreshExpiresInSec = jwtProperties.getRefreshExpirationMs() / 1000;
-        return AuthResponse.builder()
-                .accessToken(accessToken)
-                .refreshToken(refreshToken)
-                .tokenType(TOKEN_TYPE)
-                .expiresIn(expiresInSec)
-                .refreshExpiresIn(refreshExpiresInSec)
-                .displayName(client.getDisplayName() != null ? client.getDisplayName() : "")
-                .phone(client.getPhone() != null ? client.getPhone() : "")
-                .profilePhotoUrl(buildProfilePhotoUrl(client))
-                .build();
+        return buildAuthResponse(client);
     }
 
     private static String buildProfilePhotoUrl(Client client) {
@@ -246,6 +329,20 @@ public class AuthService {
     /** Levée lorsqu'un utilisateur tente de s'inscrire avec un numéro déjà associé à un compte. */
     public static class AccountAlreadyExistsException extends RuntimeException {
         public AccountAlreadyExistsException(String message) {
+            super(message);
+        }
+    }
+
+    /** Token de réinitialisation mot de passe invalide ou expiré. */
+    public static class InvalidResetTokenException extends RuntimeException {
+        public InvalidResetTokenException(String message) {
+            super(message);
+        }
+    }
+
+    /** Token de connexion (OTP nouvel appareil) invalide ou expiré. */
+    public static class InvalidLoginTokenException extends RuntimeException {
+        public InvalidLoginTokenException(String message) {
             super(message);
         }
     }

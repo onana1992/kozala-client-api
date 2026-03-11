@@ -2,6 +2,7 @@ package com.neobank.kozala_client.service;
 
 import com.neobank.kozala_client.dto.ClientRequest;
 import com.neobank.kozala_client.dto.ClientResponse;
+import com.neobank.kozala_client.entity.Address;
 import com.neobank.kozala_client.entity.Client;
 import com.neobank.kozala_client.repository.ClientRepository;
 import lombok.RequiredArgsConstructor;
@@ -80,12 +81,20 @@ public class ClientService {
     }
 
     private ClientResponse toResponse(Client client) {
-        return ClientResponse.builder()
+        return toResponseWithAddress(client, null);
+    }
+
+    /** Réponse client avec champs profil + adresse principale (optionnelle). */
+    public ClientResponse toResponseWithAddress(Client client, Address primaryAddress) {
+        ClientResponse r = ClientResponse.builder()
                 .id(client.getId())
                 .type(client.getType())
                 .displayName(client.getDisplayName())
                 .firstName(client.getFirstName())
                 .lastName(client.getLastName())
+                .gender(client.getGender())
+                .birthDate(client.getBirthDate())
+                .maritalStatus(client.getMaritalStatus())
                 .email(client.getEmail())
                 .phone(client.getPhone())
                 .status(client.getStatus())
@@ -95,5 +104,12 @@ public class ClientService {
                 .createdAt(client.getCreatedAt())
                 .updatedAt(client.getUpdatedAt())
                 .build();
+        if (primaryAddress != null) {
+            r.setCountry(primaryAddress.getCountry());
+            r.setRegion(primaryAddress.getState());
+            r.setCity(primaryAddress.getCity());
+            r.setFullAddress(primaryAddress.getLine1());
+        }
+        return r;
     }
 }

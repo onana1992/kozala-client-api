@@ -17,6 +17,9 @@ import java.util.concurrent.TimeUnit;
 public class OtpService {
 
     private static final String KEY_PREFIX = "otp:";
+    private static final String RESET_OTP_PREFIX = "reset_otp:";
+    private static final String LOGIN_OTP_PREFIX = "login_otp:";
+    private static final String EMAIL_OTP_PREFIX = "email_otp:";
     private static final int OTP_LENGTH = 6;
     private static final long OTP_VALIDITY_MINUTES = 5;
     private static final SecureRandom RANDOM = new SecureRandom();
@@ -46,6 +49,73 @@ public class OtpService {
 
     public void remove(String phone) {
         redisTemplate.delete(KEY_PREFIX + normalizePhone(phone));
+    }
+
+    /** OTP pour réinitialisation mot de passe (clé distincte du signup). En dev le code est loggé. */
+    public String generateAndStoreReset(String phone) {
+        String code = generateCode();
+        String key = RESET_OTP_PREFIX + normalizePhone(phone);
+        redisTemplate.opsForValue().set(key, code, OTP_VALIDITY_MINUTES, TimeUnit.MINUTES);
+        log.info("Reset password OTP generated for phone {} : code={}", maskPhone(phone), code);
+        return code;
+    }
+
+    public boolean validateReset(String phone, String code) {
+        String key = RESET_OTP_PREFIX + normalizePhone(phone);
+        String stored = redisTemplate.opsForValue().get(key);
+        if (stored == null) return false;
+        boolean valid = stored.equals(code);
+        if (valid) redisTemplate.delete(key);
+        return valid;
+    }
+
+    /** OTP pour connexion sur nouvel appareil. En dev le code est loggé. */
+    public String generateAndStoreLogin(String phone) {
+        String code = generateCode();
+        String key = LOGIN_OTP_PREFIX + normalizePhone(phone);
+        redisTemplate.opsForValue().set(key, code, OTP_VALIDITY_MINUTES, TimeUnit.MINUTES);
+        log.info("Login OTP generated for phone {} : code={}", maskPhone(phone), code);
+        return code;
+    }
+
+    public boolean validateLogin(String phone, String code) {
+        String key = LOGIN_OTP_PREFIX + normalizePhone(phone);
+        String stored = redisTemplate.opsForValue().get(key);
+        if (stored == null) return false;
+        boolean valid = stored.equals(code);
+        if (valid) redisTemplate.delete(key);
+        return valid;
+    }
+
+    /** Normalise l'email (minuscules) pour la clé Redis. */
+    public static String normalizeEmail(String email) {
+        return email == null ? "" : email.trim().toLowerCase();
+    }
+
+    /** Génère et stocke un code OTP pour la vérification email (TTL 5 min). */
+    public String generateAndStoreEmail(String email) {
+        String code = generateCode();
+        String key = EMAIL_OTP_PREFIX + normalizeEmail(email);
+        redisTemplate.opsForValue().set(key, code, OTP_VALIDITY_MINUTES, TimeUnit.MINUTES);
+        log.info("Email OTP generated for {} : code={}", maskEmail(email), code);
+        return code;
+    }
+
+    /** Valide le code OTP pour l'email ; supprime la clé si valide. */
+    public boolean validateEmail(String email, String code) {
+        String key = EMAIL_OTP_PREFIX + normalizeEmail(email);
+        String stored = redisTemplate.opsForValue().get(key);
+        if (stored == null) return false;
+        boolean valid = stored.equals(code);
+        if (valid) redisTemplate.delete(key);
+        return valid;
+    }
+
+    public static String maskEmail(String email) {
+        if (email == null || !email.contains("@")) return "***@***";
+        String[] parts = email.split("@");
+        String local = parts[0].length() <= 2 ? "**" : parts[0].substring(0, 2) + "***";
+        return local + "@" + parts[1];
     }
 
     /**

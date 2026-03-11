@@ -43,7 +43,7 @@ public class Address {
     @Column(name = "postal_code", length = 30)
     private String postalCode;
 
-    @Column(nullable = false, length = 2)
+    @Column(nullable = false, length = 100)
     private String country;
 
     @Column(name = "primary_address", nullable = false)

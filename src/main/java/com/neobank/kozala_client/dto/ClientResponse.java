@@ -4,6 +4,7 @@ import com.neobank.kozala_client.entity.ClientStatus;
 import com.neobank.kozala_client.entity.ClientType;
 import lombok.*;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Getter
@@ -18,6 +19,9 @@ public class ClientResponse {
     private String displayName;
     private String firstName;
     private String lastName;
+    private String gender;
+    private LocalDate birthDate;
+    private String maritalStatus;
     private String email;
     private String phone;
     private ClientStatus status;
@@ -26,4 +30,10 @@ public class ClientResponse {
     private String rejectionReason;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+
+    /** Adresse principale (profil) */
+    private String country;
+    private String region;
+    private String city;
+    private String fullAddress;
 }

@@ -19,10 +19,26 @@ public class AuthController {
     private final AuthService authService;
 
     @PostMapping("/login")
-    @Operation(summary = "Connexion", description = "Authentification par téléphone et mot de passe. Retourne access et refresh tokens.")
-    public ResponseEntity<ApiResponse<AuthResponse>> login(@Valid @RequestBody LoginRequest request) {
-        AuthResponse response = authService.login(request.getPhone(), request.getPassword());
+    @Operation(summary = "Connexion", description = "Authentification par téléphone et mot de passe. Si appareil inconnu, retourne requiresOtp + loginToken (envoyer le code à verify-login-otp). Sinon retourne les tokens.")
+    public ResponseEntity<ApiResponse<LoginResponse>> login(@Valid @RequestBody LoginRequest request) {
+        String phone = com.neobank.kozala_client.service.OtpService.normalizePhone(request.getPhone());
+        LoginResponse response = authService.login(phone, request.getPassword(), request.getDeviceId());
+        String message = response.isRequiresOtp() ? "Code envoyé" : "Connexion réussie";
+        return ResponseEntity.ok(ApiResponse.success(message, response));
+    }
+
+    @PostMapping("/verify-login-otp")
+    @Operation(summary = "Vérifier l'OTP de connexion", description = "Après login avec requiresOtp, envoie le code reçu par SMS pour obtenir les tokens. Optionnel : deviceId pour marquer l'appareil comme de confiance.")
+    public ResponseEntity<ApiResponse<AuthResponse>> verifyLoginOtp(@Valid @RequestBody VerifyLoginOtpRequest request) {
+        AuthResponse response = authService.verifyLoginOtp(request.getLoginToken(), request.getCode(), request.getDeviceId());
         return ResponseEntity.ok(ApiResponse.success("Connexion réussie", response));
+    }
+
+    @PostMapping("/resend-login-otp")
+    @Operation(summary = "Renvoyer le code OTP (connexion 2FA)", description = "Renvoye un nouveau code par SMS pour la session de connexion en cours (même loginToken).")
+    public ResponseEntity<ApiResponse<Void>> resendLoginOtp(@Valid @RequestBody ResendLoginOtpRequest request) {
+        authService.resendLoginOtp(request.getLoginToken());
+        return ResponseEntity.ok(ApiResponse.success("Code renvoyé", null));
     }
 
     @PostMapping("/refresh")
@@ -73,5 +89,28 @@ public class AuthController {
     public ResponseEntity<ApiResponse<AuthResponse>> setPassword(@Valid @RequestBody SetPasswordRequest request) {
         AuthResponse response = authService.setPassword(request.getSignupToken(), request.getPassword());
         return ResponseEntity.ok(ApiResponse.success("Mot de passe défini", response));
+    }
+
+    @PostMapping("/forgot-password")
+    @Operation(summary = "Mot de passe oublié", description = "Envoie un code OTP au numéro (SMS ou log en dev). Étape 1.")
+    public ResponseEntity<ApiResponse<Void>> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+        String phone = com.neobank.kozala_client.service.OtpService.normalizePhone(request.getPhone());
+        authService.requestPasswordReset(phone);
+        return ResponseEntity.ok(ApiResponse.success("Code envoyé", null));
+    }
+
+    @PostMapping("/verify-reset-otp")
+    @Operation(summary = "Vérifier le code (réinitialisation)", description = "Vérifie le code OTP et retourne un resetToken. Étape 2.")
+    public ResponseEntity<ApiResponse<VerifyResetOtpResponse>> verifyResetOtp(@Valid @RequestBody VerifyResetOtpRequest request) {
+        String phone = com.neobank.kozala_client.service.OtpService.normalizePhone(request.getPhone());
+        VerifyResetOtpResponse response = authService.verifyResetOtp(phone, request.getCode());
+        return ResponseEntity.ok(ApiResponse.success("Code validé", response));
+    }
+
+    @PostMapping("/reset-password")
+    @Operation(summary = "Nouveau mot de passe", description = "Réinitialise le mot de passe avec le token. Étape 3.")
+    public ResponseEntity<ApiResponse<Void>> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        authService.resetPassword(request.getResetToken(), request.getNewPassword());
+        return ResponseEntity.ok(ApiResponse.success("Mot de passe réinitialisé", null));
     }
 }

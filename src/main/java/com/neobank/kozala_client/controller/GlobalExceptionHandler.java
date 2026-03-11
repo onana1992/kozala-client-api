@@ -51,6 +51,20 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error(ex.getMessage()));
     }
 
+    @ExceptionHandler(AuthService.InvalidResetTokenException.class)
+    public ResponseEntity<ApiResponse<Void>> handleInvalidResetToken(AuthService.InvalidResetTokenException ex) {
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(ex.getMessage()));
+    }
+
+    @ExceptionHandler(AuthService.InvalidLoginTokenException.class)
+    public ResponseEntity<ApiResponse<Void>> handleInvalidLoginToken(AuthService.InvalidLoginTokenException ex) {
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(ex.getMessage()));
+    }
+
     @ExceptionHandler(RuntimeException.class)
     public ResponseEntity<ApiResponse<Void>> handleRuntimeException(RuntimeException ex) {
         return ResponseEntity
