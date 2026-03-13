@@ -16,6 +16,8 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
 
     List<Document> findByClientIdAndType(Long clientId, DocumentType type);
 
+    List<Document> findByClientIdAndTypeOrderByUploadedAtAsc(Long clientId, DocumentType type);
+
     List<Document> findByClientIdAndStatus(Long clientId, DocumentStatus status);
 
     Optional<Document> findByClientIdAndTypeAndStatus(Long clientId, DocumentType type, DocumentStatus status);

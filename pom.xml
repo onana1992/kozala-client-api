@@ -107,6 +107,12 @@
 			<artifactId>h2</artifactId>
 			<scope>runtime</scope>
 		</dependency>
+		<!-- Azure Storage Blob (documents d'identité) -->
+		<dependency>
+			<groupId>com.azure</groupId>
+			<artifactId>azure-storage-blob</artifactId>
+			<version>12.25.0</version>
+		</dependency>
 		<dependency>
 			<groupId>org.projectlombok</groupId>
 			<artifactId>lombok</artifactId>
