@@ -17,4 +17,11 @@ public class VerificationStatusResponse {
     private boolean profileCompleted;
     /** Vérification d'identité (KYC) complétée. */
     private boolean identityCompleted;
+
+    /** Statut revue email : pending, approved. Dès que le code est vérifié → approved. */
+    private String emailReviewStatus;
+    /** Statut revue profil : pending, pending_review, approved, rejected. */
+    private String profileReviewStatus;
+    /** Statut revue identité (= Client.status) : pending, pending_review, approved, rejected. */
+    private String identityReviewStatus;
 }

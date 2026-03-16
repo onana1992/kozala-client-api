@@ -79,6 +79,24 @@ public class Client {
     @Column(name = "profile_photo_path", length = 255)
     private String profilePhotoPath;
 
+    /** Revue email : PENDING puis APPROVED dès que le code email est vérifié (pas de revue manuelle). */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "email_review_status", nullable = false, length = 20)
+    @Builder.Default
+    private ReviewStatus emailReviewStatus = ReviewStatus.PENDING;
+
+    /** Revue profil : PENDING → PENDING_REVIEW quand profil complété → APPROVED/REJECTED par KYC. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "profile_review_status", nullable = false, length = 20)
+    @Builder.Default
+    private ReviewStatus profileReviewStatus = ReviewStatus.PENDING;
+
+    /** Revue identité (documents + selfie) : PENDING_REVIEW après selfie OK → APPROVED/REJECTED par reviewer. Dissocié de status (client accepté = manuel). */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "identity_review_status", nullable = false, length = 20)
+    @Builder.Default
+    private ReviewStatus identityReviewStatus = ReviewStatus.PENDING;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
@@ -110,5 +128,24 @@ public class Client {
     @PreUpdate
     protected void onUpdate() {
         updatedAt = LocalDateTime.now();
+    }
+
+    /**
+     * Met à jour status à partir des statuts de revue (email, profil, identité).
+     * PENDING_REVIEW si email=APPROVED et profile et identity sont PENDING_REVIEW ; sinon DRAFT.
+     * Ne modifie pas le status si le client est déjà VERIFIED, REJECTED ou BLOCKED (décision manuelle).
+     */
+    public void updateStatusFromReviewStatuses() {
+        if (status == ClientStatus.VERIFIED || status == ClientStatus.REJECTED || status == ClientStatus.BLOCKED) {
+            return;
+        }
+        boolean emailApproved = emailReviewStatus != null && emailReviewStatus == ReviewStatus.APPROVED;
+        boolean profilePendingReview = profileReviewStatus != null && profileReviewStatus == ReviewStatus.PENDING_REVIEW;
+        boolean identityPendingReview = identityReviewStatus != null && identityReviewStatus == ReviewStatus.PENDING_REVIEW;
+        if (emailApproved && profilePendingReview && identityPendingReview) {
+            setStatus(ClientStatus.PENDING_REVIEW);
+        } else {
+            setStatus(ClientStatus.DRAFT);
+        }
     }
 }

@@ -7,6 +7,8 @@ import com.neobank.kozala_client.entity.Client;
 import com.neobank.kozala_client.entity.Document;
 import com.neobank.kozala_client.entity.DocumentStatus;
 import com.neobank.kozala_client.entity.DocumentType;
+import com.neobank.kozala_client.entity.ReviewStatus;
+import com.neobank.kozala_client.repository.ClientRepository;
 import com.neobank.kozala_client.repository.DocumentRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -26,6 +28,7 @@ import java.util.Optional;
 public class IdentityVerificationService {
 
     private final DocumentRepository documentRepository;
+    private final ClientRepository clientRepository;
     private final IdentityDocumentStorageService storageService;
     private final FakeDocumentDetectionService fakeDocumentDetectionService;
     private final FaceVerificationService faceVerificationService;
@@ -105,20 +108,28 @@ public class IdentityVerificationService {
         switch (result) {
             case NO_FACE_IN_SELFIE -> {
                 deleteAllDocumentsForClient(client.getId());
+                ensureClientIdentityReviewPending(client.getId());
                 throw new IllegalArgumentException("Aucun visage détecté sur la selfie. Veuillez reprendre la photo en gardant votre visage bien visible.");
             }
             case NO_FACE_IN_DOCUMENT -> {
                 deleteAllDocumentsForClient(client.getId());
+                ensureClientIdentityReviewPending(client.getId());
                 throw new IllegalArgumentException("Aucun visage détecté sur le document. Veuillez envoyer une photo claire de votre document.");
             }
             case NO_MATCH -> {
                 deleteAllDocumentsForClient(client.getId());
+                ensureClientIdentityReviewPending(client.getId());
                 throw new IllegalArgumentException("La selfie ne correspond pas au visage du document. Veuillez reprendre une selfie claire.");
             }
             case DISABLED, MATCH -> {
-                // DISABLED : accepter sans vérification ; MATCH : correspondance validée
+                // DISABLED : accepter sans vérification ; MATCH : correspondance validée → identité en attente de revue (client.status = accepté reste manuel par le reviewer)
                 selfieDoc.setStatus(DocumentStatus.APPROVED);
                 documentRepository.save(selfieDoc);
+                clientRepository.findById(client.getId()).ifPresent(cl -> {
+                    cl.setIdentityReviewStatus(ReviewStatus.PENDING_REVIEW);
+                    cl.updateStatusFromReviewStatuses();
+                    clientRepository.save(cl);
+                });
             }
         }
 
@@ -163,6 +174,17 @@ public class IdentityVerificationService {
         }
         documentRepository.deleteAll(documents);
         log.info("Tous les documents du client {} ont été supprimés (S3 + base)", clientId);
+    }
+
+    /** Remet le statut de revue identité à PENDING après un échec (documents supprimés). */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void ensureClientIdentityReviewPending(Long clientId) {
+        clientRepository.findById(clientId).ifPresent(cl -> {
+            cl.setIdentityReviewStatus(ReviewStatus.PENDING);
+            cl.updateStatusFromReviewStatuses();
+            clientRepository.save(cl);
+            log.info("Client {} identity_review_status remis à PENDING après échec vérification", clientId);
+        });
     }
 
     private Document saveDocument(Client client, DocumentType type, String storageKey, String fileName, String contentType) {

@@ -6,6 +6,9 @@ import com.neobank.kozala_client.dto.profile.VerificationStatusResponse;
 import com.neobank.kozala_client.entity.Address;
 import com.neobank.kozala_client.entity.AddressType;
 import com.neobank.kozala_client.entity.Client;
+import com.neobank.kozala_client.entity.DocumentStatus;
+import com.neobank.kozala_client.entity.DocumentType;
+import com.neobank.kozala_client.entity.ReviewStatus;
 import com.neobank.kozala_client.repository.AddressRepository;
 import com.neobank.kozala_client.repository.ClientRepository;
 import lombok.RequiredArgsConstructor;
@@ -53,11 +56,27 @@ public class ProfileService {
                         && a.getLine1() != null && !a.getLine1().isBlank()
         ).orElse(false);
         boolean profileCompleted = personalFilled && addressFilled;
-        boolean identityCompleted = c.getDocuments() != null && !c.getDocuments().isEmpty();
+        boolean hasIdDoc = false;
+        boolean selfieApproved = false;
+        if (c.getDocuments() != null) {
+            for (var d : c.getDocuments()) {
+                if (d.getType() == DocumentType.ID_CARD || d.getType() == DocumentType.PASSPORT) hasIdDoc = true;
+                if (d.getType() == DocumentType.SELFIE && d.getStatus() == DocumentStatus.APPROVED) selfieApproved = true;
+            }
+        }
+        boolean identityCompleted = hasIdDoc && selfieApproved;
+        String emailReviewStatus = (c.getEmailReviewStatus() != null && c.getEmailReviewStatus() == ReviewStatus.APPROVED)
+                || (emailVerified && (c.getEmailReviewStatus() == null || c.getEmailReviewStatus() == ReviewStatus.PENDING))
+                ? "approved" : (c.getEmailReviewStatus() != null ? c.getEmailReviewStatus().name().toLowerCase() : "pending");
+        String profileReviewStatus = c.getProfileReviewStatus() != null ? c.getProfileReviewStatus().name().toLowerCase() : "pending";
+        String identityReviewStatus = c.getIdentityReviewStatus() != null ? c.getIdentityReviewStatus().name().toLowerCase() : "pending";
         return VerificationStatusResponse.builder()
                 .emailVerified(emailVerified)
                 .profileCompleted(profileCompleted)
                 .identityCompleted(identityCompleted)
+                .emailReviewStatus(emailReviewStatus)
+                .profileReviewStatus(profileReviewStatus)
+                .identityReviewStatus(identityReviewStatus)
                 .build();
     }
 
@@ -73,7 +92,6 @@ public class ProfileService {
         if (request.getGender() != null) c.setGender(request.getGender().trim().isEmpty() ? null : request.getGender().trim());
         c.setBirthDate(request.getBirthDate());
         if (request.getMaritalStatus() != null) c.setMaritalStatus(request.getMaritalStatus().trim().isEmpty() ? null : request.getMaritalStatus().trim());
-        clientRepository.save(c);
 
         boolean hasAddressData = (request.getCountry() != null && !request.getCountry().isBlank())
                 || (request.getCity() != null && !request.getCity().isBlank())
@@ -94,6 +112,23 @@ public class ProfileService {
             addr.setCountry(request.getCountry() != null ? request.getCountry().trim() : "");
             addressRepository.save(addr);
         }
+
+        boolean profileCompleted = c.getFirstName() != null && !c.getFirstName().isBlank()
+                && c.getLastName() != null && !c.getLastName().isBlank()
+                && c.getGender() != null && !c.getGender().isBlank()
+                && c.getBirthDate() != null
+                && c.getMaritalStatus() != null && !c.getMaritalStatus().isBlank();
+        var primaryAddr = addressRepository.findByClientIdAndPrimaryAddressTrue(c.getId());
+        boolean addressFilled = primaryAddr.map(a ->
+                a.getCountry() != null && !a.getCountry().isBlank()
+                        && a.getCity() != null && !a.getCity().isBlank()
+                        && a.getLine1() != null && !a.getLine1().isBlank()
+        ).orElse(false);
+        if (profileCompleted && addressFilled && (c.getProfileReviewStatus() == null || c.getProfileReviewStatus() == ReviewStatus.PENDING)) {
+            c.setProfileReviewStatus(ReviewStatus.PENDING_REVIEW);
+        }
+        c.updateStatusFromReviewStatuses();
+        clientRepository.save(c);
 
         log.info("Profile updated for clientId={}", c.getId());
         var primary = addressRepository.findByClientIdAndPrimaryAddressTrue(c.getId());
@@ -123,6 +158,7 @@ public class ProfileService {
         Client c = clientRepository.findById(client.getId())
                 .orElseThrow(() -> new RuntimeException("Client introuvable"));
         c.setEmail(normalized);
+        c.setEmailReviewStatus(ReviewStatus.APPROVED);
         clientRepository.save(c);
         log.info("Email verified for clientId={} email={}", c.getId(), OtpService.maskEmail(email));
     }
