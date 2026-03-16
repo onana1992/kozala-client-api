@@ -31,3 +31,6 @@ build/
 
 ### VS Code ###
 .vscode/
+
+# Local overrides (secrets, dev-only config). Use profile "local" to load.
+**/application-local.properties

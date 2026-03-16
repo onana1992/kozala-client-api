@@ -1,0 +1,15 @@
+# Copy this file to application-local.properties and fill in your values.
+# application-local.properties is gitignored and loaded when you run with profile "local":
+#   mvn spring-boot:run -Dspring-boot.run.profiles=local
+#   or set SPRING_PROFILES_ACTIVE=local
+#
+# These override application.properties (env vars still work; local file wins over them).
+
+# AWS (optional if you prefer file over env vars)
+# aws.access-key-id=your-access-key-id
+# aws.secret-access-key=your-secret-access-key
+
+# Example: override DB for local only
+# spring.datasource.url=jdbc:mysql://localhost:3306/...
+# spring.datasource.username=...
+# spring.datasource.password=...
