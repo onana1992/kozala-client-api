@@ -82,6 +82,34 @@ public class ProfilePhotoService {
     }
 
     /**
+     * Retourne les octets et le content-type par chemin (endpoint public, sans vérification client).
+     * path : nom simple (uuid.jpg) ou clé S3 (clients/id/profile/xxx.jpg). Refuse ".." et chemins absolus.
+     */
+    public Optional<PhotoBytes> getPhotoBytesByPath(String path) {
+        if (path == null || path.isBlank() || path.contains("..") || path.startsWith("/")) {
+            return Optional.empty();
+        }
+        if (path.startsWith(S3_KEY_PREFIX)) {
+            return identityDocumentStorageService.downloadDocument(path)
+                    .map(bytes -> new PhotoBytes(bytes, contentTypeFromPath(path)));
+        }
+        Path uploadDir = Paths.get(properties.getUploadDir()).toAbsolutePath().normalize();
+        Path file = uploadDir.resolve(path).normalize();
+        if (!file.startsWith(uploadDir) || !Files.isRegularFile(file)) {
+            return Optional.empty();
+        }
+        try {
+            byte[] bytes = Files.readAllBytes(file);
+            String contentType = Files.probeContentType(file);
+            if (contentType == null) contentType = "image/jpeg";
+            return Optional.of(new PhotoBytes(bytes, contentType));
+        } catch (IOException e) {
+            log.warn("Erreur lecture photo profil {}", path, e);
+            return Optional.empty();
+        }
+    }
+
+    /**
      * Retourne les octets et le content-type de la photo de profil (S3 ou disque local).
      * Le paramètre filenameOrKey est soit un simple filename (local) soit la clé S3 (clients/...).
      */

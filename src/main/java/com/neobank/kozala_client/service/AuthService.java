@@ -306,11 +306,7 @@ public class AuthService {
             return null;
         }
         String path = client.getProfilePhotoPath();
-        // Clé S3 (clients/...) : encoder pour que l'URL soit valide
-        if (path.contains("/")) {
-            path = java.net.URLEncoder.encode(path, java.nio.charset.StandardCharsets.UTF_8);
-        }
-        return "/api/profile/photos/" + path;
+        return "/api/profile/photos?key=" + java.net.URLEncoder.encode(path, java.nio.charset.StandardCharsets.UTF_8);
     }
 
     public static class BadCredentialsException extends RuntimeException {

@@ -44,8 +44,7 @@ public class ProfileController {
         }
         try {
             String filenameOrKey = profilePhotoService.saveProfilePhoto(client, file);
-            String segment = filenameOrKey.contains("/") ? URLEncoder.encode(filenameOrKey, StandardCharsets.UTF_8) : filenameOrKey;
-            String profilePhotoUrl = "/api/profile/photos/" + segment;
+            String profilePhotoUrl = "/api/profile/photos?key=" + URLEncoder.encode(filenameOrKey, StandardCharsets.UTF_8);
             return ResponseEntity.ok(ApiResponse.success("Photo enregistrée", Map.of("profilePhotoUrl", profilePhotoUrl)));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
@@ -54,19 +53,14 @@ public class ProfileController {
         }
     }
 
-    @GetMapping("/photos/{filename:.+}")
-    @Operation(summary = "Récupérer la photo de profil", description = "Retourne le fichier image (stockage local ou S3). filename peut être un nom simple ou une clé S3 (ex. clients/1/profile/uuid.jpg). Authentification requise.")
-    public ResponseEntity<byte[]> getProfilePhoto(
-            @AuthenticationPrincipal Client client,
-            @PathVariable String filename) {
-        if (client == null) {
-            return ResponseEntity.status(401).build();
-        }
-        return profilePhotoService.getPhotoBytes(client, filename)
-                .map(photo -> ResponseEntity.ok()
-                        .contentType(MediaType.parseMediaType(photo.contentType()))
+    @GetMapping(value = "/photos", params = "key")
+    @Operation(summary = "Récupérer la photo de profil", description = "Accès public. key = nom fichier ou clé S3 (ex. clients/1/profile/uuid.jpg), passé en query pour éviter 400 avec %2F dans le path.")
+    public ResponseEntity<byte[]> getProfilePhotoByKey(@RequestParam("key") String key) {
+        return profilePhotoService.getPhotoBytesByPath(key)
+                .map(p -> ResponseEntity.ok()
+                        .contentType(MediaType.parseMediaType(p.contentType()))
                         .header(HttpHeaders.CACHE_CONTROL, "private, max-age=3600")
-                        .body(photo.bytes()))
+                        .body(p.bytes()))
                 .orElse(ResponseEntity.notFound().build());
     }
 
