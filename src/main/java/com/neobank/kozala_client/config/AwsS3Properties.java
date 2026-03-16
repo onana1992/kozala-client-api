@@ -6,9 +6,11 @@ import org.springframework.stereotype.Component;
 
 @Data
 @Component
-@ConfigurationProperties(prefix = "azure.face")
-public class AzureFaceProperties {
+@ConfigurationProperties(prefix = "aws.s3")
+public class AwsS3Properties {
 
-    private String endpoint = "";
-    private String subscriptionKey = "";
+    /**
+     * Nom du bucket S3 pour les documents d'identité et selfies.
+     */
+    private String bucketIdentity = "";
 }

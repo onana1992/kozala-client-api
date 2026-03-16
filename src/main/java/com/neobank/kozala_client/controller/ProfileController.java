@@ -21,7 +21,8 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.nio.file.Files;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 @RestController
@@ -42,8 +43,9 @@ public class ProfileController {
             return ResponseEntity.status(401).body(ApiResponse.error("Non authentifié"));
         }
         try {
-            String filename = profilePhotoService.saveProfilePhoto(client, file);
-            String profilePhotoUrl = "/api/profile/photos/" + filename;
+            String filenameOrKey = profilePhotoService.saveProfilePhoto(client, file);
+            String segment = filenameOrKey.contains("/") ? URLEncoder.encode(filenameOrKey, StandardCharsets.UTF_8) : filenameOrKey;
+            String profilePhotoUrl = "/api/profile/photos/" + segment;
             return ResponseEntity.ok(ApiResponse.success("Photo enregistrée", Map.of("profilePhotoUrl", profilePhotoUrl)));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
@@ -52,28 +54,19 @@ public class ProfileController {
         }
     }
 
-    @GetMapping("/photos/{filename}")
-    @Operation(summary = "Récupérer la photo de profil", description = "Retourne le fichier image du client connecté. Authentification requise.")
+    @GetMapping("/photos/{filename:.+}")
+    @Operation(summary = "Récupérer la photo de profil", description = "Retourne le fichier image (stockage local ou S3). filename peut être un nom simple ou une clé S3 (ex. clients/1/profile/uuid.jpg). Authentification requise.")
     public ResponseEntity<byte[]> getProfilePhoto(
             @AuthenticationPrincipal Client client,
             @PathVariable String filename) {
         if (client == null) {
             return ResponseEntity.status(401).build();
         }
-        return profilePhotoService.getPhotoPath(client, filename)
-                .map(path -> {
-                    try {
-                        byte[] bytes = Files.readAllBytes(path);
-                        String contentType = Files.probeContentType(path);
-                        if (contentType == null) contentType = "image/jpeg";
-                        return ResponseEntity.ok()
-                                .contentType(MediaType.parseMediaType(contentType))
-                                .header(HttpHeaders.CACHE_CONTROL, "private, max-age=3600")
-                                .body(bytes);
-                    } catch (IOException e) {
-                        return ResponseEntity.notFound().<byte[]>build();
-                    }
-                })
+        return profilePhotoService.getPhotoBytes(client, filename)
+                .map(photo -> ResponseEntity.ok()
+                        .contentType(MediaType.parseMediaType(photo.contentType()))
+                        .header(HttpHeaders.CACHE_CONTROL, "private, max-age=3600")
+                        .body(photo.bytes()))
                 .orElse(ResponseEntity.notFound().build());
     }
 

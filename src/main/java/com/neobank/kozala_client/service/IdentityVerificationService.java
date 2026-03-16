@@ -11,6 +11,7 @@ import com.neobank.kozala_client.repository.DocumentRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -18,7 +19,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.UUID;
 
 @Service
 @Slf4j
@@ -69,8 +69,7 @@ public class IdentityVerificationService {
     }
 
     /**
-     * Upload selfie : stockage Blob + Face API (détection visage document + selfie, puis verify).
-     * Liveness : non implémenté ici (à brancher sur Azure Face Liveness si besoin).
+     * Upload selfie : stockage S3 + comparaison visage document/selfie (AWS Rekognition).
      */
     @Transactional
     public UploadSelfieResponse uploadSelfie(Client client, MultipartFile selfieFile) throws IOException {
@@ -80,45 +79,55 @@ public class IdentityVerificationService {
         Document selfieDoc = saveDocument(client, DocumentType.SELFIE, selfieKey, selfieFile.getOriginalFilename(), selfieFile.getContentType());
 
         byte[] selfieBytes = selfieFile.getBytes();
-        Optional<UUID> selfieFaceId = faceVerificationService.detectFaceId(selfieBytes);
-        if (selfieFaceId.isEmpty()) {
-            throw new IllegalArgumentException("Aucun visage détecté sur la selfie. Veuillez reprendre la photo en gardant votre visage bien visible.");
-        }
 
-        // Récupérer le premier document d'identité (recto) pour comparer le visage
-        List<Document> idDocs = documentRepository.findByClientIdAndTypeOrderByUploadedAtAsc(client.getId(), DocumentType.ID_CARD);
+        // Prendre le recto le plus récent (clé contenant "-recto") pour la comparaison visage
+        List<Document> idDocs = documentRepository.findByClientIdAndTypeOrderByUploadedAtDesc(client.getId(), DocumentType.ID_CARD);
         if (idDocs.isEmpty()) {
-            idDocs = documentRepository.findByClientIdAndTypeOrderByUploadedAtAsc(client.getId(), DocumentType.PASSPORT);
+            idDocs = documentRepository.findByClientIdAndTypeOrderByUploadedAtDesc(client.getId(), DocumentType.PASSPORT);
         }
         if (idDocs.isEmpty()) {
             throw new IllegalStateException("Veuillez d'abord envoyer votre document d'identité.");
         }
-
-        Optional<byte[]> docImage = storageService.downloadDocument(idDocs.get(0).getStorageKey());
+        Document rectoDoc = idDocs.stream()
+                .filter(d -> d.getStorageKey() != null && d.getStorageKey().contains("-recto"))
+                .findFirst()
+                .orElse(idDocs.get(0));
+        String storageKey = rectoDoc.getStorageKey();
+        Optional<byte[]> docImage = storageService.downloadDocument(storageKey);
         if (docImage.isEmpty()) {
-            throw new IllegalStateException("Impossible de récupérer le document pour la comparaison.");
-        }
-        Optional<UUID> documentFaceId = faceVerificationService.detectFaceId(docImage.get());
-        if (documentFaceId.isEmpty()) {
-            throw new IllegalArgumentException("Aucun visage détecté sur le document. Veuillez envoyer une photo claire de votre document.");
+            log.warn("Impossible de télécharger le document pour la comparaison. clientId={} storageKey={} (vérifier que l'objet existe dans S3 et que les credentials ont s3:GetObject)", client.getId(), storageKey);
+            throw new IllegalStateException(
+                "Impossible de récupérer le document pour la comparaison. Vérifiez que le document a bien été envoyé avec cette application (stockage S3). Si vous venez de passer sur AWS, renvoyez d'abord votre document d'identité puis la selfie.");
         }
 
-        boolean faceMatchPassed = faceVerificationService.verifyFaceMatch(documentFaceId.get(), selfieFaceId.get());
-        if (!faceMatchPassed) {
-            selfieDoc.setStatus(DocumentStatus.REJECTED);
-            selfieDoc.setReviewerNote("Face match échoué");
-            documentRepository.save(selfieDoc);
-            throw new IllegalArgumentException("La selfie ne correspond pas au visage du document. Veuillez reprendre une selfie claire.");
+        FaceVerificationResult result = faceVerificationService.verifyDocumentAndSelfie(docImage.get(), selfieBytes);
+
+        switch (result) {
+            case NO_FACE_IN_SELFIE -> {
+                deleteAllDocumentsForClient(client.getId());
+                throw new IllegalArgumentException("Aucun visage détecté sur la selfie. Veuillez reprendre la photo en gardant votre visage bien visible.");
+            }
+            case NO_FACE_IN_DOCUMENT -> {
+                deleteAllDocumentsForClient(client.getId());
+                throw new IllegalArgumentException("Aucun visage détecté sur le document. Veuillez envoyer une photo claire de votre document.");
+            }
+            case NO_MATCH -> {
+                deleteAllDocumentsForClient(client.getId());
+                throw new IllegalArgumentException("La selfie ne correspond pas au visage du document. Veuillez reprendre une selfie claire.");
+            }
+            case DISABLED, MATCH -> {
+                // DISABLED : accepter sans vérification ; MATCH : correspondance validée
+                selfieDoc.setStatus(DocumentStatus.APPROVED);
+                documentRepository.save(selfieDoc);
+            }
         }
 
-        selfieDoc.setStatus(DocumentStatus.APPROVED);
-        documentRepository.save(selfieDoc);
-        log.info("Vérification identité réussie pour clientId={}", client.getId());
+        log.info("Vérification identité réussie pour clientId={} (result={})", client.getId(), result);
 
         return UploadSelfieResponse.builder()
                 .documentId(selfieDoc.getId())
                 .livenessPassed(true)
-                .faceMatchPassed(true)
+                .faceMatchPassed(result == FaceVerificationResult.MATCH || result == FaceVerificationResult.DISABLED)
                 .identityVerified(true)
                 .build();
     }
@@ -138,6 +147,22 @@ public class IdentityVerificationService {
                 .identityCompleted(hasIdDoc && hasSelfie && all.stream().anyMatch(d -> d.getType() == DocumentType.SELFIE && d.getStatus() == DocumentStatus.APPROVED))
                 .status(status)
                 .build();
+    }
+
+    /**
+     * Supprime tous les documents du client : S3 puis base. Utilisé quand la vérification (selfie) échoue.
+     * REQUIRES_NEW pour que les suppressions soient commitées même si l'appelant lance une exception.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void deleteAllDocumentsForClient(Long clientId) {
+        List<Document> documents = documentRepository.findByClientId(clientId);
+        for (Document d : documents) {
+            if (d.getStorageKey() != null && !d.getStorageKey().isBlank()) {
+                storageService.deleteDocument(d.getStorageKey());
+            }
+        }
+        documentRepository.deleteAll(documents);
+        log.info("Tous les documents du client {} ont été supprimés (S3 + base)", clientId);
     }
 
     private Document saveDocument(Client client, DocumentType type, String storageKey, String fileName, String contentType) {

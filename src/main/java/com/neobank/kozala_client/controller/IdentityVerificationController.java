@@ -20,13 +20,13 @@ import java.io.IOException;
 @RestController
 @RequestMapping("/api/identity-verification")
 @RequiredArgsConstructor
-@Tag(name = "Vérification d'identité", description = "Upload document, selfie, statut (Azure Blob, Custom Vision, Face API)")
+@Tag(name = "Vérification d'identité", description = "Upload document, selfie, statut. Stockage S3, comparaison visage AWS Rekognition.")
 public class IdentityVerificationController {
 
     private final IdentityVerificationService identityVerificationService;
 
     @PostMapping(value = "/documents", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @Operation(summary = "Upload document d'identité", description = "Recto obligatoire, verso obligatoire si CNI. Détection faux document (Custom Vision).")
+    @Operation(summary = "Upload document d'identité", description = "Recto obligatoire, verso si CNI. Stockage S3.")
     public ResponseEntity<ApiResponse<UploadDocumentResponse>> uploadDocuments(
             @AuthenticationPrincipal Client client,
             @RequestParam("docType") String docType,
@@ -51,7 +51,7 @@ public class IdentityVerificationController {
     }
 
     @PostMapping(value = "/selfie", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @Operation(summary = "Upload selfie", description = "Comparaison visage document / selfie (Azure Face API). Liveness à brancher si besoin.")
+    @Operation(summary = "Upload selfie", description = "Stockage S3 puis comparaison visage document ↔ selfie (AWS Rekognition CompareFaces).")
     public ResponseEntity<ApiResponse<UploadSelfieResponse>> uploadSelfie(
             @AuthenticationPrincipal Client client,
             @RequestParam("file") MultipartFile file) {
