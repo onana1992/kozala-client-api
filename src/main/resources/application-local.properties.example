@@ -3,7 +3,7 @@
 #   mvn spring-boot:run -Dspring-boot.run.profiles=local
 #   or set SPRING_PROFILES_ACTIVE=local
 #
-# These override application.properties (env vars still work; local file wins over them).
+# These override application.properties.
 
 # AWS (optional if you prefer file over env vars)
 # aws.access-key-id=your-access-key-id
@@ -13,3 +13,13 @@
 # spring.datasource.url=jdbc:mysql://localhost:3306/...
 # spring.datasource.username=...
 # spring.datasource.password=...
+
+# Appels sortants vers l’API sur localhost:8080 (RestClient bean "remoteApiRestClient")
+# app.remote-api.base-url=http://localhost:8080
+# app.remote-api.bearer-token=<JWT service — ne pas commiter>
+# GET comptes avec jeton service : nom du query param (ex. clientId, client_id). Vide = aucun param.
+# app.remote-api.accounts-client-id-query-param=clientId
+# En-tête optionnel pour l’ID client (ex. X-Client-Id) si l’API core l’exige.
+# app.remote-api.accounts-client-id-header=X-Client-Id
+# app.remote-api.current-account-product-code=CURR-STD-XAF
+# app.remote-api.savings-account-product-code=SAV-STD-XAF

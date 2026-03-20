@@ -3,6 +3,7 @@ package com.neobank.kozala_client.controller;
 import com.neobank.kozala_client.dto.ApiResponse;
 import com.neobank.kozala_client.service.AuthService;
 import com.neobank.kozala_client.service.JwtService;
+import com.neobank.kozala_client.service.RemoteAccountOpeningException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
@@ -62,6 +63,13 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<Void>> handleInvalidLoginToken(AuthService.InvalidLoginTokenException ex) {
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(ex.getMessage()));
+    }
+
+    @ExceptionHandler(RemoteAccountOpeningException.class)
+    public ResponseEntity<ApiResponse<Void>> handleRemoteAccountOpening(RemoteAccountOpeningException ex) {
+        return ResponseEntity
+                .status(HttpStatus.BAD_GATEWAY)
                 .body(ApiResponse.error(ex.getMessage()));
     }
 

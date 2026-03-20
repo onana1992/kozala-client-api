@@ -45,6 +45,13 @@ public class SignupTokenStore {
         return getEntry(token).map(SignupEntry::clientId);
     }
 
+    /**
+     * Lit le token sans le supprimer (ex. set-password : réessai si l’API comptes distante échoue).
+     */
+    public Optional<SignupEntry> readSignupEntry(String token) {
+        return getEntry(token);
+    }
+
     public Optional<SignupEntry> getAndRemove(String token) {
         String key = KEY_PREFIX + token;
         String value = redisTemplate.opsForValue().get(key);

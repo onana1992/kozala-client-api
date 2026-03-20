@@ -5,6 +5,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
+
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -24,4 +26,10 @@ public class AuthResponse {
     private String phone;
     /** URL relative de la photo de profil (ex: /api/profile/photos/uuid.jpg), null si aucune. */
     private String profilePhotoUrl;
+
+    /** Comptes ouverts côté API distante lors du set-password (inscription). */
+    private OpenedAccountsDto openedAccounts;
+
+    /** Comptes renvoyés par GET /api/client/accounts (API distante) après émission du JWT. */
+    private List<ClientAccountDto> accounts;
 }

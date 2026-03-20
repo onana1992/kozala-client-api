@@ -12,6 +12,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Service
 @Slf4j
@@ -34,6 +36,8 @@ public class AuthService {
     private final ResetPasswordTokenStore resetPasswordTokenStore;
     private final LoginTokenStore loginTokenStore;
     private final TrustedDeviceStore trustedDeviceStore;
+    private final RemoteAccountOpeningService remoteAccountOpeningService;
+    private final RemoteClientAccountsService remoteClientAccountsService;
 
     private static final long LOGIN_OTP_VALIDITY_SECONDS = 300; // 5 min
 
@@ -95,11 +99,11 @@ public class AuthService {
             trustedDeviceStore.markTrusted(client.getId(), deviceId);
         }
         log.info("Login OTP verified clientId={} phone={}", client.getId(), maskPhone(client.getPhone()));
-        return buildAuthResponse(client);
+        return buildAuthResponse(client, null);
     }
 
     private LoginResponse buildLoginResponseWithTokens(Client client) {
-        AuthResponse auth = buildAuthResponse(client);
+        AuthResponse auth = buildAuthResponse(client, null);
         return LoginResponse.builder()
                 .requiresOtp(false)
                 .accessToken(auth.getAccessToken())
@@ -110,12 +114,17 @@ public class AuthService {
                 .displayName(auth.getDisplayName())
                 .phone(auth.getPhone())
                 .profilePhotoUrl(auth.getProfilePhotoUrl())
+                .accounts(auth.getAccounts())
                 .build();
     }
 
-    private AuthResponse buildAuthResponse(Client client) {
+    private AuthResponse buildAuthResponse(Client client, OpenedAccountsDto openedAccounts) {
         String accessToken = jwtService.generateAccessToken(client);
         String refreshToken = jwtService.generateRefreshToken(client);
+        // client toujours chargé depuis la BD (login par téléphone, OTP, refresh depuis subject JWT, set-password…)
+        long clientId = client.getId();
+        log.info("Comptes distants : appel API core avec clientId={} (id BD après résolution client)", clientId);
+        var accounts = remoteClientAccountsService.fetchAccounts(clientId, accessToken);
         long expiresInSec = jwtProperties.getAccessExpirationMs() / 1000;
         long refreshExpiresInSec = jwtProperties.getRefreshExpirationMs() / 1000;
         return AuthResponse.builder()
@@ -127,6 +136,8 @@ public class AuthService {
                 .displayName(client.getDisplayName() != null ? client.getDisplayName() : "")
                 .phone(client.getPhone() != null ? client.getPhone() : "")
                 .profilePhotoUrl(buildProfilePhotoUrl(client))
+                .openedAccounts(openedAccounts)
+                .accounts(accounts)
                 .build();
     }
 
@@ -141,7 +152,7 @@ public class AuthService {
         Client client = clientRepository.findById(clientId)
                 .orElseThrow(() -> new JwtService.InvalidTokenException("Client introuvable"));
         jwtService.revokeRefreshTokenByJti(jti);
-        return buildAuthResponse(client);
+        return buildAuthResponse(client, null);
     }
 
     /**
@@ -275,12 +286,12 @@ public class AuthService {
     }
 
     /**
-     * Définit le mot de passe du compte. Valide le signup token (Redis), récupère le client,
-     * met à jour le hash, supprime le token Redis, puis émet les tokens JWT de session.
+     * Définit le mot de passe, ouvre courant + épargne via l’API distante, puis émet les JWT.
+     * Le signup token Redis n’est retiré qu’après commit : en cas d’échec API, l’utilisateur peut réessayer.
      */
     @Transactional
     public AuthResponse setPassword(String signupToken, String password) {
-        SignupTokenStore.SignupEntry entry = signupTokenStore.getAndRemove(signupToken)
+        SignupTokenStore.SignupEntry entry = signupTokenStore.readSignupEntry(signupToken)
                 .orElseThrow(() -> new InvalidSignupTokenException("Token d'inscription invalide ou expiré"));
 
         Client client;
@@ -296,9 +307,16 @@ public class AuthService {
         client.setStatus(ClientStatus.DRAFT); // ou PENDING_REVIEW selon la règle métier
         clientRepository.save(client);
 
-        signupTokenStore.remove(signupToken);
+        OpenedAccountsDto openedAccounts = remoteAccountOpeningService.openCheckingAndSavings(client.getId());
 
-        return buildAuthResponse(client);
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                signupTokenStore.remove(signupToken);
+            }
+        });
+
+        return buildAuthResponse(client, openedAccounts);
     }
 
     private static String buildProfilePhotoUrl(Client client) {

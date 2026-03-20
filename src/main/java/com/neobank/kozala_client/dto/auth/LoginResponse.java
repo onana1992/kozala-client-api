@@ -5,6 +5,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
+
 /**
  * Réponse du login : soit tokens (appareil déjà de confiance), soit demande OTP (nouvel appareil).
  */
@@ -30,4 +32,6 @@ public class LoginResponse {
     private String displayName;
     private String phone;
     private String profilePhotoUrl;
+    /** Comptes distants (même sémantique que {@link AuthResponse#getAccounts()}). */
+    private List<ClientAccountDto> accounts;
 }
