@@ -124,7 +124,7 @@ public class AuthService {
         // client toujours chargé depuis la BD (login par téléphone, OTP, refresh depuis subject JWT, set-password…)
         long clientId = client.getId();
         log.info("Comptes distants : appel API core avec clientId={} (id BD après résolution client)", clientId);
-        var accounts = remoteClientAccountsService.fetchAccounts(clientId, accessToken);
+        var accounts = remoteClientAccountsService.fetchAccounts(clientId);
         long expiresInSec = jwtProperties.getAccessExpirationMs() / 1000;
         long refreshExpiresInSec = jwtProperties.getRefreshExpirationMs() / 1000;
         return AuthResponse.builder()

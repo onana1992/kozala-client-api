@@ -8,7 +8,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.ParameterizedTypeReference;
-import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
@@ -30,27 +29,19 @@ public class RemoteClientAccountsService {
     private final RemoteApiProperties remoteApiProperties;
 
     /**
-     * Récupère les comptes sur l’API distante pour un client déjà résolu en base ({@code clients.id}).
-     * <ol>
-     *   <li>Si {@code app.remote-api.bearer-token} est défini : GET avec ce jeton service et {@code ?clientId=…}.</li>
-     *   <li>Sinon ou si la liste est vide : GET avec le JWT utilisateur (Authorization Bearer access token).</li>
-     * </ol>
+     * Récupère les comptes sur l’API distante pour un client résolu en base ({@code clients.id}).
+     * Authentification : uniquement {@code app.remote-api.bearer-token} + param / en-tête client selon la config.
      */
-    public List<ClientAccountDto> fetchAccounts(long clientIdFromDb, String userAccessToken) {
-        List<ClientAccountDto> viaService = tryFetchWithServiceTokenAndClientId(clientIdFromDb);
-        log.info("remote GET {} — service+clientId={} (id client en BD) → {} compte(s)",
-                ACCOUNTS_PATH, clientIdFromDb, viaService.size());
-        if (!viaService.isEmpty()) {
-            return viaService;
-        }
-        List<ClientAccountDto> viaUser = tryFetchWithUserAccessToken(userAccessToken);
-        log.info("remote GET {} — user JWT → {} compte(s)", ACCOUNTS_PATH, viaUser.size());
-        return viaUser;
+    public List<ClientAccountDto> fetchAccounts(long clientIdFromDb) {
+        List<ClientAccountDto> list = tryFetchWithServiceTokenAndClientId(clientIdFromDb);
+        log.info("remote GET {} — bearer service + clientId={} (id BD) → {} compte(s)",
+                ACCOUNTS_PATH, clientIdFromDb, list.size());
+        return list;
     }
 
     private List<ClientAccountDto> tryFetchWithServiceTokenAndClientId(long clientId) {
         if (!StringUtils.hasText(remoteApiProperties.getBearerToken())) {
-            log.debug("remote accounts: pas de bearer service, skip appel service+clientId");
+            log.warn("remote GET {} ignoré : app.remote-api.bearer-token non défini", ACCOUNTS_PATH);
             return Collections.emptyList();
         }
         String param = remoteApiProperties.getAccountsClientIdQueryParam();
@@ -70,32 +61,11 @@ public class RemoteClientAccountsService {
                     .body(new ParameterizedTypeReference<List<RemoteBankAccountDto>>() {});
             return mapList(raw);
         } catch (RestClientResponseException e) {
-            log.warn("remote GET {} (service, clientId={}) → HTTP {} body={}",
+            log.warn("remote GET {} (clientId={}) → HTTP {} body={}",
                     ACCOUNTS_PATH, clientId, e.getStatusCode(), truncate(e.getResponseBodyAsString(), 500));
             return Collections.emptyList();
         } catch (Exception e) {
-            log.warn("remote GET {} (service, clientId={}) erreur: {}", ACCOUNTS_PATH, clientId, e.getMessage());
-            return Collections.emptyList();
-        }
-    }
-
-    private List<ClientAccountDto> tryFetchWithUserAccessToken(String userAccessToken) {
-        if (!StringUtils.hasText(userAccessToken)) {
-            return Collections.emptyList();
-        }
-        try {
-            List<RemoteBankAccountDto> raw = remoteApiRestClient.get()
-                    .uri(ACCOUNTS_PATH)
-                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + userAccessToken.trim())
-                    .retrieve()
-                    .body(new ParameterizedTypeReference<List<RemoteBankAccountDto>>() {});
-            return mapList(raw);
-        } catch (RestClientResponseException e) {
-            log.warn("remote GET {} (user JWT) → HTTP {} body={}",
-                    ACCOUNTS_PATH, e.getStatusCode(), truncate(e.getResponseBodyAsString(), 500));
-            return Collections.emptyList();
-        } catch (Exception e) {
-            log.warn("remote GET {} (user JWT) erreur: {}", ACCOUNTS_PATH, e.getMessage());
+            log.warn("remote GET {} (clientId={}) erreur: {}", ACCOUNTS_PATH, clientId, e.getMessage());
             return Collections.emptyList();
         }
     }
@@ -128,7 +98,9 @@ public class RemoteClientAccountsService {
     }
 
     private static String truncate(String s, int max) {
-        if (s == null) return "";
+        if (s == null) {
+            return "";
+        }
         return s.length() <= max ? s : s.substring(0, max) + "…";
     }
 }

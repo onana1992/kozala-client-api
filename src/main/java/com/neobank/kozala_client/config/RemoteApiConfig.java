@@ -8,7 +8,9 @@ import org.springframework.web.client.RestClient;
 
 /**
  * Fournit un {@link RestClient} pointant sur {@code app.remote-api.base-url} avec
- * {@code Authorization: Bearer} si {@code app.remote-api.bearer-token} est défini.
+ * {@code Authorization: Bearer} issu de {@code app.remote-api.bearer-token}.
+ * Les services ne doivent pas surcharger cet en-tête avec le JWT utilisateur : l’API distante
+ * s’authentifie uniquement avec ce jeton service.
  * <p>Injection : {@code @Qualifier(RemoteApiConfig.REMOTE_API_REST_CLIENT) RestClient client}
  */
 @Configuration

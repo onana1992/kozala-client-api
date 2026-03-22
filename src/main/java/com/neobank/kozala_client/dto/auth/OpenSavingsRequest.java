@@ -28,4 +28,7 @@ public class OpenSavingsRequest {
 
     @NotNull
     private Long debitAccountId;
+
+    /** Devise du versement (ex. XAF). Si absent, XAF est utilisé vers l’API distante. */
+    private String currency;
 }

@@ -14,7 +14,7 @@
 # spring.datasource.username=...
 # spring.datasource.password=...
 
-# Appels sortants vers l’API sur localhost:8080 (RestClient bean "remoteApiRestClient")
+# Appels sortants vers l’API bancaire (RestClient) : toujours Authorization Bearer = app.remote-api.bearer-token
 # app.remote-api.base-url=http://localhost:8080
 # app.remote-api.bearer-token=<JWT service — ne pas commiter>
 # GET comptes avec jeton service : nom du query param (ex. clientId, client_id). Vide = aucun param.

@@ -15,8 +15,9 @@ public class RemoteApiProperties {
 	private String baseUrl = "http://localhost:8080";
 
 	/**
-	 * Jeton JWT pour l’en-tête Authorization: Bearer … (vide = pas d’en-tête).
-	 * Préférez une variable d’environnement ou application-local.properties (gitignored).
+	 * Jeton JWT service pour tous les appels sortants vers l’API bancaire ({@code Authorization: Bearer …}).
+	 * Obligatoire en pratique pour les routes protégées. Préférez {@code REMOTE_API_BEARER_TOKEN} ou
+	 * {@code application-local.properties} (gitignored).
 	 */
 	private String bearerToken = "";
 
@@ -27,8 +28,8 @@ public class RemoteApiProperties {
 	private String savingsAccountProductCode = "SAV-STD-XAF";
 
 	/**
-	 * Nom du query param pour cibler le client sur GET /api/client/accounts (appel avec jeton service).
-	 * Si l’API distante n’accepte pas ce paramètre, laisser vide : requête sans param (second essai : JWT utilisateur).
+	 * Nom du query param pour cibler le client sur GET /api/client/accounts (jeton service + {@code clientId}).
+	 * Vide = requête sans paramètre (si l’API distante le permet).
 	 */
 	private String accountsClientIdQueryParam = "clientId";
 

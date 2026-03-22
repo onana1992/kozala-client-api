@@ -9,5 +9,4 @@ public class KozalaClientApplication {
 	public static void main(String[] args) {
 		SpringApplication.run(KozalaClientApplication.class, args);
 	}
-
 }

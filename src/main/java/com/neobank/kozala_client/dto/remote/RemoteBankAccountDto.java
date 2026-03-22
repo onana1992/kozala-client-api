@@ -18,6 +18,8 @@ public class RemoteBankAccountDto {
     private Long productId;
     private RemoteAccountProductDto product;
     private String accountNumber;
+    /** Libellé du compte (ouverture épargne). */
+    private String accountLabel;
     private String status;
     private String currency;
     private BigDecimal balance;

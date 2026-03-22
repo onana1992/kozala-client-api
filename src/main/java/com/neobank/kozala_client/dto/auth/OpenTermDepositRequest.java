@@ -31,4 +31,7 @@ public class OpenTermDepositRequest {
 
     @NotNull
     private Long termPeriodId;
+
+    /** Devise du versement (ex. XAF). Si absent, XAF est utilisé vers l’API distante. */
+    private String currency;
 }
