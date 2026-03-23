@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.Data;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 /**
  * Compte (courant ou épargne) dans la réponse de
@@ -36,5 +37,6 @@ public class RemoteBankAccountDto {
     private String createdAt;
     private String updatedAt;
     private BigDecimal effectiveAvailableBalance;
+    private List<RemoteAccountPaymentMethodLinkDto> paymentMethods;
     private Integer periodMonths;
 }

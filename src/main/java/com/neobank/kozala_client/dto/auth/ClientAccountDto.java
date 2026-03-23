@@ -7,6 +7,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 /** Compte bancaire renvoyé au mobile (synthèse après appel GET /api/client/accounts distant). */
 @Data
@@ -31,4 +32,6 @@ public class ClientAccountDto {
     private String currency;
     private BigDecimal balance;
     private BigDecimal effectiveAvailableBalance;
+    /** Moyens de paiement liés au compte (GET /api/client/accounts distant). */
+    private List<ClientAccountPaymentMethodLinkDto> paymentMethods;
 }

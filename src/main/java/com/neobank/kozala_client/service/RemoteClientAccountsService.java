@@ -3,7 +3,11 @@ package com.neobank.kozala_client.service;
 import com.neobank.kozala_client.config.RemoteApiConfig;
 import com.neobank.kozala_client.config.RemoteApiProperties;
 import com.neobank.kozala_client.dto.auth.ClientAccountDto;
+import com.neobank.kozala_client.dto.auth.ClientAccountPaymentMethodLinkDto;
+import com.neobank.kozala_client.dto.auth.ClientPaymentMethodInfoDto;
+import com.neobank.kozala_client.dto.remote.RemoteAccountPaymentMethodLinkDto;
 import com.neobank.kozala_client.dto.remote.RemoteBankAccountDto;
+import com.neobank.kozala_client.dto.remote.RemotePaymentMethodRefDto;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -16,6 +20,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 
 @Service
 @Slf4j
@@ -94,6 +99,45 @@ public class RemoteClientAccountsService {
                 .currency(a.getCurrency())
                 .balance(a.getBalance())
                 .effectiveAvailableBalance(effective)
+                .paymentMethods(mapPaymentMethods(a.getPaymentMethods()))
+                .build();
+    }
+
+    private static List<ClientAccountPaymentMethodLinkDto> mapPaymentMethods(
+            List<RemoteAccountPaymentMethodLinkDto> raw) {
+        if (raw == null || raw.isEmpty()) {
+            return List.of();
+        }
+        return raw.stream()
+                .filter(Objects::nonNull)
+                .map(RemoteClientAccountsService::mapPaymentLink)
+                .toList();
+    }
+
+    private static ClientAccountPaymentMethodLinkDto mapPaymentLink(RemoteAccountPaymentMethodLinkDto link) {
+        return ClientAccountPaymentMethodLinkDto.builder()
+                .id(link.getId())
+                .paymentMethod(mapPaymentRef(link.getPaymentMethod()))
+                .allowedDeposit(link.getAllowedDeposit())
+                .allowedWithdrawal(link.getAllowedWithdrawal())
+                .allowedLoanRepayment(link.getAllowedLoanRepayment())
+                .displayOrder(link.getDisplayOrder())
+                .createdAt(link.getCreatedAt())
+                .updatedAt(link.getUpdatedAt())
+                .build();
+    }
+
+    private static ClientPaymentMethodInfoDto mapPaymentRef(RemotePaymentMethodRefDto ref) {
+        if (ref == null) {
+            return null;
+        }
+        return ClientPaymentMethodInfoDto.builder()
+                .id(ref.getId())
+                .code(ref.getCode())
+                .name(ref.getName())
+                .isActive(ref.getIsActive())
+                .createdAt(ref.getCreatedAt())
+                .updatedAt(ref.getUpdatedAt())
                 .build();
     }
 

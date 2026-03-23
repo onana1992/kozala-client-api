@@ -4,6 +4,7 @@ import com.neobank.kozala_client.dto.ApiResponse;
 import com.neobank.kozala_client.dto.auth.*;
 import com.neobank.kozala_client.service.AuthService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
+@SecurityRequirements
 @Tag(name = "Authentification", description = "Login, signup (OTP, complete, set-password), refresh et logout JWT")
 public class AuthController {
 

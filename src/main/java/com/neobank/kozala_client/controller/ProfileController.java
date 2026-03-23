@@ -10,6 +10,7 @@ import com.neobank.kozala_client.entity.Client;
 import com.neobank.kozala_client.service.ProfilePhotoService;
 import com.neobank.kozala_client.service.ProfileService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -54,6 +55,7 @@ public class ProfileController {
     }
 
     @GetMapping(value = "/photos", params = "key")
+    @SecurityRequirements
     @Operation(summary = "Récupérer la photo de profil", description = "Accès public. key = nom fichier ou clé S3 (ex. clients/1/profile/uuid.jpg), passé en query pour éviter 400 avec %2F dans le path.")
     public ResponseEntity<byte[]> getProfilePhotoByKey(@RequestParam("key") String key) {
         return profilePhotoService.getPhotoBytesByPath(key)
