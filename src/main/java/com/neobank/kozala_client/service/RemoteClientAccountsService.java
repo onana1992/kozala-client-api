@@ -28,26 +28,23 @@ import java.util.Objects;
 public class RemoteClientAccountsService {
 
     private static final String ACCOUNTS_PATH = "/api/client/accounts";
+    private static final String MISSING_BEARER =
+            "Configuration manquante : définissez app.remote-api.bearer-token pour lister les comptes.";
 
     @Qualifier(RemoteApiConfig.REMOTE_API_REST_CLIENT)
     private final RestClient remoteApiRestClient;
     private final RemoteApiProperties remoteApiProperties;
 
     /**
-     * Récupère les comptes sur l’API distante pour un client résolu en base ({@code clients.id}).
-     * Authentification : uniquement {@code app.remote-api.bearer-token} + param / en-tête client selon la config.
+     * Récupère les comptes sur l’API distante pour un {@code clientId} (id client en base).
+     * Authentification sortante : {@code app.remote-api.bearer-token} + query / en-tête client selon la config.
+     *
+     * @throws RemoteClientAccountsException si bearer absent ou erreur HTTP / réseau
      */
-    public List<ClientAccountDto> fetchAccounts(long clientIdFromDb) {
-        List<ClientAccountDto> list = tryFetchWithServiceTokenAndClientId(clientIdFromDb);
-        log.info("remote GET {} — bearer service + clientId={} (id BD) → {} compte(s)",
-                ACCOUNTS_PATH, clientIdFromDb, list.size());
-        return list;
-    }
-
-    private List<ClientAccountDto> tryFetchWithServiceTokenAndClientId(long clientId) {
+    public List<ClientAccountDto> fetchAccounts(long clientId) {
         if (!StringUtils.hasText(remoteApiProperties.getBearerToken())) {
-            log.warn("remote GET {} ignoré : app.remote-api.bearer-token non défini", ACCOUNTS_PATH);
-            return Collections.emptyList();
+            log.warn("remote GET {} : app.remote-api.bearer-token non défini", ACCOUNTS_PATH);
+            throw new RemoteClientAccountsException(MISSING_BEARER, null);
         }
         String param = remoteApiProperties.getAccountsClientIdQueryParam();
         UriComponentsBuilder ub = UriComponentsBuilder.fromPath(ACCOUNTS_PATH);
@@ -64,14 +61,21 @@ public class RemoteClientAccountsService {
             List<RemoteBankAccountDto> raw = spec
                     .retrieve()
                     .body(new ParameterizedTypeReference<List<RemoteBankAccountDto>>() {});
-            return mapList(raw);
+            List<ClientAccountDto> list = mapList(raw);
+            log.info("remote GET {} — bearer service + clientId={} → {} compte(s)",
+                    ACCOUNTS_PATH, clientId, list.size());
+            return list;
         } catch (RestClientResponseException e) {
             log.warn("remote GET {} (clientId={}) → HTTP {} body={}",
                     ACCOUNTS_PATH, clientId, e.getStatusCode(), truncate(e.getResponseBodyAsString(), 500));
-            return Collections.emptyList();
+            throw new RemoteClientAccountsException(
+                    RemoteRestClientErrorSupport.extractRemoteErrorMessage(e),
+                    e);
         } catch (Exception e) {
             log.warn("remote GET {} (clientId={}) erreur: {}", ACCOUNTS_PATH, clientId, e.getMessage());
-            return Collections.emptyList();
+            throw new RemoteClientAccountsException(
+                    "Impossible de charger les comptes pour le moment.",
+                    e);
         }
     }
 
