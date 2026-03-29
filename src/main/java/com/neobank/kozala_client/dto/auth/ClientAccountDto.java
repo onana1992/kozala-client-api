@@ -19,6 +19,8 @@ public class ClientAccountDto {
 
     private Long id;
     private String accountNumber;
+    /** Libellé du compte (API distante), distinct du nom de produit. */
+    private String accountLabel;
     private String productCode;
     private String productName;
     /** Description commerciale du produit (API distante). */

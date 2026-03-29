@@ -94,6 +94,7 @@ public class RemoteClientAccountsService {
         return ClientAccountDto.builder()
                 .id(a.getId())
                 .accountNumber(a.getAccountNumber())
+                .accountLabel(a.getAccountLabel())
                 .productCode(p != null ? p.getCode() : null)
                 .productName(p != null ? p.getName() : null)
                 .productDescription(p != null ? p.getDescription() : null)
