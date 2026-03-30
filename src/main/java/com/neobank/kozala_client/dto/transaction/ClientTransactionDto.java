@@ -31,4 +31,6 @@ public class ClientTransactionDto {
     private Long createdBy;
     private Instant createdAt;
     private Instant updatedAt;
+
+    private ClientTransferCounterpartyDto transferCounterparty;
 }

@@ -2,8 +2,10 @@ package com.neobank.kozala_client.service;
 
 import com.neobank.kozala_client.config.RemoteApiConfig;
 import com.neobank.kozala_client.config.RemoteApiProperties;
+import com.neobank.kozala_client.dto.remote.RemoteTransferCounterpartyDto;
 import com.neobank.kozala_client.dto.remote.RemoteTransactionDto;
 import com.neobank.kozala_client.dto.remote.RemoteTransactionPageDto;
+import com.neobank.kozala_client.dto.transaction.ClientTransferCounterpartyDto;
 import com.neobank.kozala_client.dto.transaction.ClientTransactionDto;
 import com.neobank.kozala_client.dto.transaction.ClientTransactionsPageDto;
 import lombok.RequiredArgsConstructor;
@@ -16,6 +18,8 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.util.UriComponentsBuilder;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.util.Collections;
 import java.util.List;
@@ -27,6 +31,10 @@ import java.util.Objects;
 public class RemoteClientTransactionsService {
 
     private static final String TRANSACTIONS_PATH = "/api/client/transactions";
+
+    private static String transactionsDetailPath(long transactionId) {
+        return TRANSACTIONS_PATH + "/" + transactionId;
+    }
     private static final String MISSING_BEARER =
             "Configuration manquante : définissez app.remote-api.bearer-token pour consulter les transactions.";
 
@@ -108,6 +116,45 @@ public class RemoteClientTransactionsService {
         }
     }
 
+    /**
+     * Proxy {@code GET /api/client/transactions/{id}?clientId=} vers le core.
+     */
+    public ClientTransactionDto fetchOne(long clientId, long transactionId) {
+        if (!StringUtils.hasText(remoteApiProperties.getBearerToken())) {
+            log.warn("remote GET {} : app.remote-api.bearer-token non défini", TRANSACTIONS_PATH);
+            throw new RemoteClientTransactionsException(MISSING_BEARER, null);
+        }
+        String uri = UriComponentsBuilder.fromPath(transactionsDetailPath(transactionId))
+                .queryParam("clientId", clientId)
+                .build()
+                .toUriString();
+        try {
+            RemoteTransactionDto raw = remoteApiRestClient.get()
+                    .uri(uri)
+                    .retrieve()
+                    .body(RemoteTransactionDto.class);
+            if (raw == null || raw.getId() == null) {
+                throw new RemoteClientTransactionsException(
+                        "Réponse transaction vide du serveur bancaire.", null);
+            }
+            log.info("remote GET {} — clientId={} transactionId={}", uri, clientId, transactionId);
+            return mapRow(raw);
+        } catch (RestClientResponseException e) {
+            log.warn("remote GET transaction detail (clientId={} id={}) → HTTP {} body={}",
+                    clientId, transactionId, e.getStatusCode(),
+                    truncate(e.getResponseBodyAsString(), 500));
+            throw new RemoteClientTransactionsException(
+                    RemoteRestClientErrorSupport.extractRemoteErrorMessage(e),
+                    e);
+        } catch (Exception e) {
+            log.warn("remote GET transaction detail (clientId={} id={}) erreur: {}",
+                    clientId, transactionId, e.getMessage());
+            throw new RemoteClientTransactionsException(
+                    "Impossible de charger le détail de la transaction pour le moment.",
+                    e);
+        }
+    }
+
     private static List<ClientTransactionDto> mapContent(List<RemoteTransactionDto> raw) {
         if (raw == null || raw.isEmpty()) {
             return Collections.emptyList();
@@ -133,7 +180,36 @@ public class RemoteClientTransactionsService {
                 .createdBy(t.getCreatedBy())
                 .createdAt(t.getCreatedAt())
                 .updatedAt(t.getUpdatedAt())
+                .transferCounterparty(mapCounterparty(t.getTransferCounterparty()))
                 .build();
+    }
+
+    private static ClientTransferCounterpartyDto mapCounterparty(RemoteTransferCounterpartyDto c) {
+        if (c == null) {
+            return null;
+        }
+        return ClientTransferCounterpartyDto.builder()
+                .partyRole(c.getPartyRole())
+                .counterpartyClientId(c.getCounterpartyClientId())
+                .displayName(c.getDisplayName())
+                .firstName(c.getFirstName())
+                .lastName(c.getLastName())
+                .phone(c.getPhone())
+                .email(c.getEmail())
+                .counterpartyAccountId(c.getCounterpartyAccountId())
+                .accountNumber(c.getAccountNumber())
+                .accountLabel(c.getAccountLabel())
+                .productName(c.getProductName())
+                .profilePhotoUrl(buildProfilePhotoUrlFromCorePath(c.getProfilePhotoPath()))
+                .build();
+    }
+
+    private static String buildProfilePhotoUrlFromCorePath(String profilePhotoPath) {
+        if (!StringUtils.hasText(profilePhotoPath)) {
+            return null;
+        }
+        return "/api/profile/photos?key="
+                + URLEncoder.encode(profilePhotoPath.trim(), StandardCharsets.UTF_8);
     }
 
     private static String truncate(String s, int max) {

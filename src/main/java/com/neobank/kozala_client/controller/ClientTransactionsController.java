@@ -1,6 +1,7 @@
 package com.neobank.kozala_client.controller;
 
 import com.neobank.kozala_client.dto.ApiResponse;
+import com.neobank.kozala_client.dto.transaction.ClientTransactionDto;
 import com.neobank.kozala_client.dto.transaction.ClientTransactionsPageDto;
 import com.neobank.kozala_client.entity.Client;
 import com.neobank.kozala_client.service.RemoteClientTransactionsException;
@@ -9,13 +10,16 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.client.RestClientResponseException;
 
 import java.time.LocalDate;
 
@@ -64,6 +68,33 @@ public class ClientTransactionsController {
             return ResponseEntity.ok(ApiResponse.success(data));
         } catch (RemoteClientTransactionsException e) {
             return ResponseEntity.status(502).body(ApiResponse.error(e.getMessage()));
+        }
+    }
+
+    @GetMapping("/{transactionId}")
+    @Operation(
+            summary = "Détail d'une transaction (proxy API distante)",
+            description = "GET core /api/client/transactions/{id} avec clientId (aligné sur le JWT).")
+    public ResponseEntity<ApiResponse<ClientTransactionDto>> getTransaction(
+            @PathVariable long transactionId,
+            @RequestParam("clientId") long clientId,
+            @AuthenticationPrincipal Client client) {
+        if (client == null) {
+            return ResponseEntity.status(401).body(ApiResponse.error("Non authentifié"));
+        }
+        if (clientId != client.getId()) {
+            return ResponseEntity.status(403).body(ApiResponse.error("clientId incompatible avec le compte authentifié"));
+        }
+        try {
+            ClientTransactionDto data = remoteClientTransactionsService.fetchOne(clientId, transactionId);
+            return ResponseEntity.ok(ApiResponse.success(data));
+        } catch (RemoteClientTransactionsException e) {
+            if (e.getCause() instanceof RestClientResponseException rce
+                    && rce.getStatusCode().value() == HttpStatus.NOT_FOUND.value()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(ApiResponse.error("Transaction introuvable ou non accessible."));
+            }
+            return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(ApiResponse.error(e.getMessage()));
         }
     }
 }

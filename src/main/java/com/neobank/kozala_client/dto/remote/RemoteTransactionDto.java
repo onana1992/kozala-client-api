@@ -30,4 +30,7 @@ public class RemoteTransactionDto {
     private Long createdBy;
     private Instant createdAt;
     private Instant updatedAt;
+
+    /** Présent sur GET détail transaction pour les virements (TRANSFER). */
+    private RemoteTransferCounterpartyDto transferCounterparty;
 }
