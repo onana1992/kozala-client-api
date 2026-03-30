@@ -8,7 +8,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 
 /**
- * Corps d’une transaction telle que sérialisée par le core ({@code GET /api/client/transactions}).
+ * Corps d’une transaction telle que sérialisée par le core ({@code GET /api/client/transactions} et détail).
  */
 @Data
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -31,6 +31,6 @@ public class RemoteTransactionDto {
     private Instant createdAt;
     private Instant updatedAt;
 
-    /** Présent sur GET détail transaction pour les virements (TRANSFER). */
+    /** Présent pour les virements (TRANSFER) sur liste et détail. */
     private RemoteTransferCounterpartyDto transferCounterparty;
 }
