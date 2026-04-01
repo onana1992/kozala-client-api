@@ -4,6 +4,7 @@ import com.neobank.kozala_client.config.RemoteApiConfig;
 import com.neobank.kozala_client.config.RemoteApiProperties;
 import com.neobank.kozala_client.dto.remote.RemoteOpsTransferRequest;
 import com.neobank.kozala_client.dto.remote.RemoteOpsTransferResponseDto;
+import com.neobank.kozala_client.dto.remote.RemoteOwnTransferRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -21,6 +22,7 @@ import java.util.UUID;
 public class RemoteOpsTransferService {
 
     private static final String CLIENT_PERSON_TRANSFER_PATH = "/api/client/transfers/person";
+    private static final String CLIENT_OWN_TRANSFER_PATH = "/api/client/transfers/own";
     private static final String MISSING_BEARER =
             "Configuration manquante : définissez app.remote-api.bearer-token pour effectuer un transfert.";
 
@@ -53,6 +55,36 @@ public class RemoteOpsTransferService {
                     e);
         } catch (Exception e) {
             log.warn("remote POST {} erreur: {}", CLIENT_PERSON_TRANSFER_PATH, e.getMessage());
+            throw new RemotePersonTransferException(
+                    "Le transfert n'a pas pu être effectué. Réessayez plus tard.",
+                    e);
+        }
+    }
+
+    /**
+     * Virement entre deux comptes du même client ({@code POST /api/client/transfers/own}).
+     */
+    public RemoteOpsTransferResponseDto createOwn(RemoteOwnTransferRequest body) {
+        if (!StringUtils.hasText(remoteApiProperties.getBearerToken())) {
+            throw new RemotePersonTransferException(MISSING_BEARER, null);
+        }
+        try {
+            RemoteOpsTransferResponseDto r = remoteApiRestClient.post()
+                    .uri(CLIENT_OWN_TRANSFER_PATH)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .header("Idempotency-Key", UUID.randomUUID().toString())
+                    .body(body)
+                    .retrieve()
+                    .body(RemoteOpsTransferResponseDto.class);
+            return r != null ? r : RemoteOpsTransferResponseDto.builder().build();
+        } catch (RestClientResponseException e) {
+            log.warn("remote POST {} → HTTP {} body={}",
+                    CLIENT_OWN_TRANSFER_PATH, e.getStatusCode(), truncate(e.getResponseBodyAsString(), 400));
+            throw new RemotePersonTransferException(
+                    RemoteRestClientErrorSupport.extractRemoteErrorMessage(e),
+                    e);
+        } catch (Exception e) {
+            log.warn("remote POST {} erreur: {}", CLIENT_OWN_TRANSFER_PATH, e.getMessage());
             throw new RemotePersonTransferException(
                     "Le transfert n'a pas pu être effectué. Réessayez plus tard.",
                     e);
