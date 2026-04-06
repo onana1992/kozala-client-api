@@ -55,6 +55,8 @@ Documentation détaillée du workflow core-backend : dans le dépôt **`core_ban
 
 ## 3. Secrets GitHub (dépôt kozala-client-api)
 
+Ce ne sont **pas** les mêmes données que **`~/docker-run-kozala-client.env`** sur l’EC2. GitHub Actions tourne sur les **serveurs GitHub** : il lui faut des **Repository secrets** pour se connecter à **ECR** et pousser l’image. Le fichier **`.env` sur l’EC2** sert uniquement au **conteneur** Spring Boot au runtime. Tu dois configurer **les deux** : secrets sur GitHub + fichier sur l’EC2.
+
 **Settings** → **Secrets and variables** → **Actions** :
 
 | Secret | Rôle |
