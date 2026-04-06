@@ -27,6 +27,7 @@ env:
   ECR_REGISTRY: 633510959273.dkr.ecr.us-east-1.amazonaws.com
   ECR_REPOSITORY: kozala-client-api
   ECR_REPOSITORY_URI: 633510959273.dkr.ecr.us-east-1.amazonaws.com/kozala-client-api
+  ECR_IMAGE: 633510959273.dkr.ecr.us-east-1.amazonaws.com/kozala-client-api:latest
 
 jobs:
   build-and-push:
@@ -77,7 +78,6 @@ jobs:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     env:
-      ECR_IMAGE: ${{ env.ECR_REPOSITORY_URI }}:latest
       DEPLOY_DIR: /home/ubuntu/kozala-client-deploy
     steps:
       - name: Checkout
