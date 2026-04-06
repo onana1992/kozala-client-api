@@ -34,3 +34,6 @@ build/
 
 # Local overrides (secrets, dev-only config). Use profile "local" to load.
 **/application-local.properties
+
+# Fichier d’env déploiement EC2 : jamais de secrets dans Git (utiliser docker-run-kozala-client.env.example).
+docker-run-kozala-client.env

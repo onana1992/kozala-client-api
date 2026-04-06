@@ -1,0 +1,36 @@
+# Stack EC2 : Redis + kozala-client-api (même réseau Docker).
+# Déploiement : voir docs/GUIDE-DEPLOIEMENT-REDIS.md
+# Fichier d’env applicatif sur l’EC2 : /home/ubuntu/docker-run-kozala-client.env (adapter si utilisateur ≠ ubuntu)
+
+name: kozala-client
+
+services:
+  redis-kozala:
+    image: redis:7-alpine
+    container_name: redis-kozala
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-kozala-data:/data
+    networks:
+      - kozala-net
+
+  kozala-client-api:
+    image: 633510959273.dkr.ecr.us-east-1.amazonaws.com/kozala-client-api:latest
+    container_name: kozala-client-api
+    restart: unless-stopped
+    depends_on:
+      - redis-kozala
+    ports:
+      - "8082:8082"
+    env_file:
+      - /home/ubuntu/docker-run-kozala-client.env
+    networks:
+      - kozala-net
+
+networks:
+  kozala-net:
+    name: kozala-net
+
+volumes:
+  redis-kozala-data:

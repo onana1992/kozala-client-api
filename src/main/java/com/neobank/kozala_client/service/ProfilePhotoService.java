@@ -28,7 +28,8 @@ public class ProfilePhotoService {
     private final IdentityDocumentStorageService identityDocumentStorageService;
 
     /**
-     * Enregistre la photo de profil : sur S3 si app.identity-storage.provider=aws, sinon sur disque local.
+     * Enregistre la photo de profil : sur S3 si le bucket est configuré, sinon sur disque local
+     * (sauf si {@code app.profile-photo.require-aws-storage=true}, alors S3 obligatoire).
      */
     @Transactional
     public String saveProfilePhoto(Client client, MultipartFile file) throws IOException {
@@ -46,9 +47,13 @@ public class ProfilePhotoService {
         String extension = contentType.contains("png") ? "png" : contentType.contains("webp") ? "webp" : "jpg";
         String filename = UUID.randomUUID() + "." + extension;
 
+        if (properties.isRequireAwsStorage() && !identityDocumentStorageService.isUsingAws()) {
+            throw new IllegalStateException(
+                    "Photos de profil : stockage local désactivé. Configurez aws.s3.bucket-identity (S3) sur cette instance.");
+        }
+
         if (identityDocumentStorageService.isUsingAws()) {
             String key = identityDocumentStorageService.uploadProfilePhoto(client.getId(), filename, file);
-            String oldPath = client.getProfilePhotoPath();
             client.setProfilePhotoPath(key);
             clientRepository.save(client);
             log.info("Photo de profil enregistrée S3 pour clientId={} key={}", client.getId(), key);
