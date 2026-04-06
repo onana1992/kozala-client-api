@@ -15,6 +15,7 @@ on:
       - "pom.xml"
       - "Dockerfile"
       - "docker-compose.yml"
+      - "docker-run-kozala-client.env.example"
       - ".github/workflows/kozala-client-api-ci-cd.yml"
 
 concurrency:
