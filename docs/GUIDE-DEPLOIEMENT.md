@@ -69,6 +69,22 @@ Les PR **depuis un fork** ne exécutent pas le déploiement (pas d’exposition 
 
 **Même EC2 que le core** : tu peux **réutiliser les mêmes valeurs** `EC2_HOST`, `EC2_USER` et `EC2_SSH_PRIVATE_KEY` que sur le dépôt `core_banking_backend` ; seuls les dépôts ECR et les conteneurs diffèrent.
 
+### Fichier `docker-run-kozala-client.env` introuvable dans l’IDE
+
+Ce nom est dans **`.gitignore`** : il **n’est plus sur Git** (pour éviter d’y remettre des secrets). Le dépôt contient seulement **`docker-run-kozala-client.env.example`**.
+
+- En local : copie le modèle puis édite ta copie — `docker-run-kozala-client.env` doit exister à la racine du projet (tu peux le recréer avec `copy docker-run-kozala-client.env.example docker-run-kozala-client.env` sous Windows).
+- Dans **Cursor / VS Code**, les fichiers ignorés peuvent être masqués : ouvre le fichier via **Fichier → Ouvrir**, ou active l’affichage des fichiers exclus dans les paramètres de l’explorateur.
+
+### Erreur CI : « Set repository secrets AWS_ACCESS_KEY_ID… »
+
+Le job **Verify AWS secrets** échoue si **`AWS_ACCESS_KEY_ID`** ou **`AWS_SECRET_ACCESS_KEY`** n’existent pas pour **ce** dépôt (`kozala-client-api`). Les secrets GitHub ne sont **pas** hérités automatiquement d’un autre repo.
+
+1. Va sur **GitHub** → dépôt **kozala-client-api** → **Settings** → **Secrets and variables** → **Actions**.
+2. Onglet **Repository secrets** → **New repository secret** : crée **`AWS_ACCESS_KEY_ID`** puis **`AWS_SECRET_ACCESS_KEY`** (noms exacts, sans espace).
+3. Si les clés sont dans une **organisation** : **Organization secrets** → vérifie que ce dépôt est **autorisé** à les utiliser.
+4. Réutilise les mêmes clés IAM que pour **core-backend** si l’IAM a bien **`ecr:PutImage`** (etc.) sur le dépôt ECR **`kozala-client-api`**.
+
 ---
 
 ## 4. Fichier `~/docker-run-kozala-client.env` sur l’EC2
