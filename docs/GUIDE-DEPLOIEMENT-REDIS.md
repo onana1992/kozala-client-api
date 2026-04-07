@@ -68,7 +68,7 @@ En SSH :
 ```bash
 mkdir -p ~/kozala-client-deploy
 # Copier docker-compose.yml depuis ton poste (exemple) :
-# scp -i ~/.ssh/ta-cle.pem docker-compose.yml ubuntu@ec2-100-56-14-195.compute-1.amazonaws.com:~/kozala-client-deploy/
+# scp -i ~/.ssh/ta-cle.pem docker-compose.yml ubuntu@ec2-18-207-137-124.compute-1.amazonaws.com:~/kozala-client-deploy/
 
 aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 633510959273.dkr.ecr.us-east-1.amazonaws.com
 

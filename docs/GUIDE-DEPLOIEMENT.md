@@ -2,7 +2,7 @@
 
 Ce document décrit le déploiement de l’**API client mobile** (ce dépôt) avec **Docker**, **Amazon ECR** et **EC2**, en cohérence avec le **core banking backend**.
 
-**Instance EC2** : **kozala-client-api** et **core-backend** tournent sur **la même EC2** — SSH : **`ubuntu@ec2-100-56-14-195.compute-1.amazonaws.com`**. Deux conteneurs Docker (`core-backend` sur **8080**, `kozala-client-api` sur **8082**), deux fichiers d’environnement dans le home de l’utilisateur SSH.
+**Instance EC2** : **kozala-client-api** et **core-backend** tournent sur **la même EC2** — SSH : **`ubuntu@ec2-18-207-137-124.compute-1.amazonaws.com`**. Deux conteneurs Docker (`core-backend` sur **8080**, `kozala-client-api` sur **8082**), deux fichiers d’environnement dans le home de l’utilisateur SSH.
 
 ---
 
@@ -16,7 +16,7 @@ Ce document décrit le déploiement de l’**API client mobile** (ce dépôt) av
 **URI du dépôt ECR** : `633510959273.dkr.ecr.us-east-1.amazonaws.com/kozala-client-api`  
 Les images sont taguées **`latest`** et **`<sha-du-commit>`** ; pour `docker pull` / `docker run`, utiliser par exemple `…/kozala-client-api:latest`.
 
-L’API client appelle le core via **`APP_REMOTE_API_BASE_URL`**. Sur cette instance, le DNS public **`http://ec2-100-56-14-195.compute-1.amazonaws.com:8080`** convient souvent depuis le conteneur client (même host). En alternative : IP privée VPC **`http://<IP_PRIVÉE>:8080`**, ou **`http://host.docker.internal:8080`** avec `--add-host=host.docker.internal:host-gateway` sur le `docker run` du client.
+L’API client appelle le core via **`APP_REMOTE_API_BASE_URL`**. Sur cette instance, le DNS public **`http://ec2-18-207-137-124.compute-1.amazonaws.com:8080`** convient souvent depuis le conteneur client (même host). En alternative : IP privée VPC **`http://<IP_PRIVÉE>:8080`**, ou **`http://host.docker.internal:8080`** avec `--add-host=host.docker.internal:host-gateway` sur le `docker run` du client.
 
 **CI/CD** : un workflow GitHub Actions build l’image, la pousse vers ECR, puis se connecte en **SSH** à l’EC2 pour copier **`docker-compose.yml`** dans **`~/kozala-client-deploy/`** et exécuter **`docker compose up -d`** (**Redis** + **kozala-client-api**). Les secrets applicatifs ne passent **pas** par GitHub : ils restent dans **`~/docker-run-kozala-client.env`** sur le serveur.
 
@@ -36,7 +36,7 @@ Documentation détaillée du workflow core-backend : dans le dépôt **`core_ban
 
 ### 2.2 Instance EC2 (partagée avec le core-backend)
 
-- **Hôte** : `ec2-100-56-14-195.compute-1.amazonaws.com`, utilisateur SSH **`ubuntu`**.
+- **Hôte** : `ec2-18-207-137-124.compute-1.amazonaws.com`, utilisateur SSH **`ubuntu`**.
 - **Une seule EC2** héberge **`core-backend`** et **`kozala-client-api`** : vérifier que **`~/docker-run.env`** (core) et **`~/docker-run-kozala-client.env`** (client) coexistent.
 - **Docker** + plugin **Compose v2** (`docker compose`) installés ; l’utilisateur SSH (ex. `ubuntu`) peut exécuter `docker` (sinon préfixer avec `sudo` et adapter le workflow).
 - **AWS CLI** et droits de **`aws ecr get-login-password`** (souvent via **rôle IAM** attaché à l’instance — recommandé).
@@ -63,7 +63,7 @@ Ce ne sont **pas** les mêmes données que **`~/docker-run-kozala-client.env`** 
 |--------|------|
 | `AWS_ACCESS_KEY_ID` | Clé IAM pour push ECR (droits minimaux). |
 | `AWS_SECRET_ACCESS_KEY` | Secret associé. |
-| `EC2_HOST` | **`ec2-100-56-14-195.compute-1.amazonaws.com`** (**la même** valeur que pour le workflow **core-backend**). |
+| `EC2_HOST` | **`ec2-18-207-137-124.compute-1.amazonaws.com`** (**la même** valeur que pour le workflow **core-backend**). |
 | `EC2_USER` | **`ubuntu`** (**identique** au dépôt core). |
 | `EC2_SSH_PRIVATE_KEY` | Contenu de la clé `.pem` (lignes `BEGIN` / `END` incluses). |
 
@@ -93,18 +93,31 @@ Le job **Verify AWS secrets** échoue si **`AWS_ACCESS_KEY_ID`** ou **`AWS_SECRE
 
 1. Le dépôt versionne **`docker-run-kozala-client.env.example`** (sans secrets). En local : `cp docker-run-kozala-client.env.example docker-run-kozala-client.env`, remplis les valeurs, puis envoie **`~/docker-run-kozala-client.env`** sur l’EC2 (le fichier **`docker-run-kozala-client.env`** est **gitignored**).
 
-   **Windows (PowerShell)** — copier le modèle puis éditer sur le serveur, ou envoyer ta copie locale remplie :
+   **Windows (PowerShell)** — adapte le chemin de la clé **`.pem`** si besoin.
+
+   - **Fichier déjà rempli en local** (`docker-run-kozala-client.env`, non versionné) :
 
    ```powershell
-   scp -i "C:\Users\Personnel\kozala_keys.pem" "C:\Users\Personnel\Desktop\project\Mobile-Api\kozala-client-api\docker-run-kozala-client.env.example" ubuntu@ec2-100-56-14-195.compute-1.amazonaws.com:~/docker-run-kozala-client.env
+   scp -i "C:\Users\Personnel\kozala-instance.pem" "C:\Users\Personnel\Desktop\project\Mobile-Api\kozala-client-api\docker-run-kozala-client.env" ubuntu@ec2-18-207-137-124.compute-1.amazonaws.com:~/docker-run-kozala-client.env
    ```
 
-   Puis en SSH sur l’EC2 : `nano ~/docker-run-kozala-client.env` et remplacer les **`CHANGEME`**.
+   Puis en SSH : `chmod 600 ~/docker-run-kozala-client.env`.
+
+   - **Modèle seulement** (`docker-run-kozala-client.env.example`) : copie vers le même nom sur le serveur, puis édition des **`CHANGEME`** :
+
+   ```powershell
+   scp -i "C:\Users\Personnel\kozala-instance.pem" "C:\Users\Personnel\Desktop\project\Mobile-Api\kozala-client-api\docker-run-kozala-client.env.example" ubuntu@ec2-18-207-137-124.compute-1.amazonaws.com:~/docker-run-kozala-client.env
+   ```
+
+   Puis en SSH sur l’EC2 : `nano ~/docker-run-kozala-client.env` et remplacer les **`CHANGEME`**, puis `chmod 600 ~/docker-run-kozala-client.env`.
 
    **Linux / macOS** — depuis la racine du dépôt :
 
    ```bash
-   scp -i ~/chemin/vers/cle.pem docker-run-kozala-client.env.example ubuntu@ec2-100-56-14-195.compute-1.amazonaws.com:~/docker-run-kozala-client.env
+   # copie locale remplie
+   scp -i ~/chemin/vers/cle.pem docker-run-kozala-client.env ubuntu@ec2-18-207-137-124.compute-1.amazonaws.com:~/docker-run-kozala-client.env
+   # ou modèle puis édition sur le serveur
+   scp -i ~/chemin/vers/cle.pem docker-run-kozala-client.env.example ubuntu@ec2-18-207-137-124.compute-1.amazonaws.com:~/docker-run-kozala-client.env
    ```
 
 2. Édite-le sur l’EC2 (`nano`, `vi`, etc.) et remplace **tous** les placeholders par des valeurs de production :
@@ -112,7 +125,7 @@ Le job **Verify AWS secrets** échoue si **`AWS_ACCESS_KEY_ID`** ou **`AWS_SECRE
    - Redis,
    - secrets JWT (`jwt.secret` / `jwt.refresh-secret` ou équivalent `JWT_*` selon ce que tu utilises),
    - AWS (préférer un **rôle IAM** sur l’EC2 et laisser clés vides si possible),
-   - **`APP_REMOTE_API_BASE_URL`** (ex. **`http://ec2-100-56-14-195.compute-1.amazonaws.com:8080`** depuis le conteneur client sur la même instance),
+   - **`APP_REMOTE_API_BASE_URL`** (ex. **`http://ec2-18-207-137-124.compute-1.amazonaws.com:8080`** depuis le conteneur client sur la même instance),
    - **`APP_REMOTE_API_BEARER_TOKEN`**.
 
 3. **Ne commite pas** ce fichier une fois rempli de secrets réels. Garde une copie chiffrée ou dans un gestionnaire de secrets si besoin.
@@ -145,7 +158,7 @@ Ouvre une PR interne qui touche l’un de ces chemins ; après succès des jobs 
 2. Déployer et valider le **core-backend** (port **8080**, `~/docker-run.env`).
 3. Obtenir un **JWT service** pour l’API client (selon la procédure du core banking).
 4. Renseigner **`docker-run-kozala-client.env`** puis laisser le workflow déployer la stack **Compose** (Redis + **kozala-client-api**, port **8082**).
-5. Vérifier **actuator** : `GET http://ec2-100-56-14-195.compute-1.amazonaws.com:8082/actuator/health` (si le port **8082** est ouvert sur le security group).
+5. Vérifier **actuator** : `GET http://ec2-18-207-137-124.compute-1.amazonaws.com:8082/actuator/health` (si le port **8082** est ouvert sur le security group).
 
 ---
 
