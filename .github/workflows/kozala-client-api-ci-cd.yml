@@ -10,7 +10,7 @@
 #
 # Auth AWS pour ce workflow : secrets AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY (dépôt GitHub)
 # Déploiement SSH : secrets EC2_HOST, EC2_USER, EC2_SSH_PRIVATE_KEY (obligatoires sur CE dépôt — sinon « missing server host »)
-# Ex. EC2_HOST=ec2-18-207-137-124.compute-1.amazonaws.com, EC2_USER=ubuntu (idem core-backend si même serveur)
+# Ex. EC2_HOST=ec2-44-216-9-250.compute-1.amazonaws.com, EC2_USER=ubuntu (idem core-backend si même serveur)
 # Déploiement EC2 : docker compose (Redis + API) — docs/GUIDE-DEPLOIEMENT-REDIS.md
 # Dépôt ECR : 633510959273.dkr.ecr.us-east-1.amazonaws.com/kozala-client-api
 
