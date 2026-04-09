@@ -1,0 +1,158 @@
+# CI/CD : PR → main → build/push ECR → déploiement SSH EC2
+#
+# IMPORTANT — Deux jeux de credentials différents :
+# 1) Secrets GitHub (Settings → Secrets → Actions) : AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
+#    → utilisés UNIQUEMENT sur les runners GitHub pour builder l’image et la pousser vers ECR.
+#    → Ne sont PAS lus depuis l’EC2 ni depuis docker-run-kozala-client.env.
+# 2) Fichier ~/docker-run-kozala-client.env sur l’EC2
+#    → variables pour l’application Spring Boot dans Docker (DB, JWT, S3, etc.).
+#    → N’alimente pas ce workflow ; il faut quand même configurer (1) sur GitHub.
+#
+# Auth AWS pour ce workflow : secrets AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY (dépôt GitHub)
+# Déploiement SSH : secrets EC2_HOST, EC2_USER, EC2_SSH_PRIVATE_KEY (obligatoires sur CE dépôt — sinon « missing server host »)
+# Ex. EC2_HOST=ec2-44-216-9-250.compute-1.amazonaws.com, EC2_USER=ubuntu (idem core-backend si même serveur)
+# Déploiement EC2 : docker compose (Redis + API) — docs/GUIDE-DEPLOIEMENT-REDIS.md
+# Dépôt ECR : 633510959273.dkr.ecr.us-east-1.amazonaws.com/kozala-client-api
+
+name: kozala-client-api — CI/CD
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "src/**"
+      - "pom.xml"
+      - "Dockerfile"
+      - "docker-compose.yml"
+      - "docker-run-kozala-client.env.example"
+      - ".github/workflows/kozala-client-api-ci-cd.yml"
+
+concurrency:
+  group: kozala-client-api-ci-cd-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REGISTRY: 633510959273.dkr.ecr.us-east-1.amazonaws.com
+  ECR_REPOSITORY: kozala-client-api
+  ECR_REPOSITORY_URI: 633510959273.dkr.ecr.us-east-1.amazonaws.com/kozala-client-api
+  ECR_IMAGE: 633510959273.dkr.ecr.us-east-1.amazonaws.com/kozala-client-api:latest
+
+jobs:
+  build-and-push:
+    name: Build & push ECR
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify AWS secrets are set
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: |
+          if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
+            echo "::error title=Secrets AWS manquants::Les secrets AWS_ACCESS_KEY_ID et AWS_SECRET_ACCESS_KEY sont vides ou absents pour ce dépôt."
+            echo ""
+            echo "Ce contrôle lit les secrets du DÉPÔT GITHUB, pas le fichier sur ton EC2."
+            echo ""
+            echo "À faire sur GitHub (compte avec droits admin sur le repo) :"
+            echo "  1. Ouvrir : Settings → Secrets and variables → Actions"
+            echo "  2. Onglet « Repository secrets » → New repository secret"
+            echo "  3. Créer exactement : AWS_ACCESS_KEY_ID et AWS_SECRET_ACCESS_KEY (même orthographe, sensible à la casse)"
+            echo "  4. Si tu utilises des secrets d’organisation : Policies → ajouter ce dépôt à la liste autorisée"
+            echo "  5. Tu peux réutiliser les mêmes valeurs que le dépôt core-backend si l’utilisateur IAM a le droit push sur ECR kozala-client-api"
+            exit 1
+          fi
+
+      - name: Configure AWS credentials (IAM keys)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag and push
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t "$REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" .
+          docker tag "$REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" "$REGISTRY/$ECR_REPOSITORY:latest"
+          docker push "$REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          docker push "$REGISTRY/$ECR_REPOSITORY:latest"
+
+  deploy:
+    name: Deploy EC2 (SSH + Docker Compose)
+    needs: build-and-push
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    env:
+      DEPLOY_DIR: /home/ubuntu/kozala-client-deploy
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify EC2 deploy secrets are set
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+          EC2_SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+        run: |
+          missing=
+          [ -z "$EC2_HOST" ] && missing="${missing} EC2_HOST"
+          [ -z "$EC2_USER" ] && missing="${missing} EC2_USER"
+          [ -z "$EC2_SSH_PRIVATE_KEY" ] && missing="${missing} EC2_SSH_PRIVATE_KEY"
+          if [ -n "$missing" ]; then
+            echo "::error title=Secrets déploiement EC2 manquants::Les secrets suivants sont vides ou absents :$missing"
+            echo ""
+            echo "appleboy/ssh-action affiche « missing server host » quand EC2_HOST n’est pas défini sur ce dépôt."
+            echo "GitHub → ce dépôt → Settings → Secrets and variables → Actions → Repository secrets :"
+            echo "  EC2_HOST              (ex. ec2-xxx.compute-1.amazonaws.com ou l’IP publique)"
+            echo "  EC2_USER              (ex. ubuntu)"
+            echo "  EC2_SSH_PRIVATE_KEY   (contenu du .pem, BEGIN/END inclus)"
+            echo "Les secrets du dépôt core-backend ne s’appliquent pas automatiquement à kozala-client-api : les recréer ici ou autoriser les secrets d’org pour ce repo."
+            exit 1
+          fi
+
+      - name: Ensure deploy directory on EC2
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          script: mkdir -p ${{ env.DEPLOY_DIR }}
+
+      - name: Copy docker-compose.yml to EC2
+        uses: appleboy/scp-action@v1.0.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          source: "docker-compose.yml"
+          target: "${{ env.DEPLOY_DIR }}/"
+
+      - name: Pull image and compose up
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          script_stop: true
+          script: |
+            set -e
+            aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin ${{ env.ECR_REGISTRY }}
+            docker pull ${{ env.ECR_IMAGE }}
+            cd ${{ env.DEPLOY_DIR }}
+            docker compose down --remove-orphans 2>/dev/null || true
+            docker rm -f kozala-client-api redis-kozala 2>/dev/null || true
+            docker compose up -d --remove-orphans
