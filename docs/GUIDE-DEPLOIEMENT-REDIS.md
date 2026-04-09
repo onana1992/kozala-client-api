@@ -21,6 +21,17 @@ Dans **`/home/ubuntu/docker-run-kozala-client.env`** (référencé par Compose) 
 
 Le modèle **`docker-run-kozala-client.env.example`** du dépôt définit **`SPRING_DATA_REDIS_HOST=redis-kozala`** ; recopie vers **`docker-run-kozala-client.env`** (local + EC2).
 
+### API core banking (core-backend sur la **même** EC2)
+
+Le conteneur **kozala-client-api** n’est **pas** sur l’interface réseau de l’hôte : **`localhost:8080` dans le conteneur** ne pointe pas vers **core-backend**. Le DNS public de l’EC2 (**`http://ec2-…amazonaws.com:8080`**) est souvent **injoignable** depuis un conteneur (routage / hairpin).
+
+À utiliser dans **`APP_REMOTE_API_BASE_URL`** :
+
+- **`http://host.docker.internal:8080`** — le `docker-compose.yml` du dépôt ajoute **`extra_hosts: host.docker.internal:host-gateway`** pour résoudre vers l’hôte.
+- Si besoin : **`http://172.17.0.1:8080`** (passerelle **docker0** par défaut sur Linux).
+
+Vérifier sur l’hôte que **core-backend** tourne : `docker ps` (port **8080** mappé) et éventuellement `curl -s http://127.0.0.1:8080/actuator/health`.
+
 ---
 
 ## 2. Fichier `docker-compose.yml` (dépôt)
@@ -28,7 +39,7 @@ Le modèle **`docker-run-kozala-client.env.example`** du dépôt définit **`SPR
 À la racine de **kozala-client-api** :
 
 - **Service `redis-kozala`** : image `redis:7-alpine`, persistance **AOF** sur le volume **`redis-kozala-data`**, réseau **`kozala-net`**.
-- **Service `kozala-client-api`** : image ECR **`633510959273.dkr.ecr.us-east-1.amazonaws.com/kozala-client-api:latest`**, port **8082**, `depends_on: redis-kozala`, `env_file` pointant vers **`/home/ubuntu/docker-run-kozala-client.env`**.
+- **Service `kozala-client-api`** : image ECR **`633510959273.dkr.ecr.us-east-1.amazonaws.com/kozala-client-api:latest`**, port **8082**, `depends_on: redis-kozala`, `env_file` pointant vers **`/home/ubuntu/docker-run-kozala-client.env`**, **`extra_hosts`** pour **`host.docker.internal`** (accès au core-backend sur l’hôte, voir ci-dessus).
 
 Réseau Docker nommé **`kozala-net`** (partagé uniquement entre ces deux services).  
 **`container_name`** explicites : `redis-kozala` et `kozala-client-api`.

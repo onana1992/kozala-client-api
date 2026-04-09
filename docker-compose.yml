@@ -25,6 +25,9 @@ services:
       - "8082:8082"
     env_file:
       - /home/ubuntu/docker-run-kozala-client.env
+    # Accès au core-backend sur l’hôte EC2 (docker run -p 8080:8080) : utiliser host.docker.internal dans APP_REMOTE_API_BASE_URL
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - kozala-net
 
